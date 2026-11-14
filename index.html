@@ -17,6 +17,7 @@
   </div>
 
   <div id="corner">
+    <button id="btnView" class="icon hidden" title="Reset view (V)">⤢</button>
     <button id="btnMusic" class="icon" title="Music (M)">♫</button>
     <button id="btnSfx" class="icon" title="Sound effects (S)">🔊</button>
     <button id="btnMenu" class="icon hidden" title="Levels (Esc)">☰</button>
@@ -58,13 +59,14 @@
       <p>Plant explosives on the building, set their strength and fuse delays, then bring it down
         <b>on its own footprint</b>. Debris that hits the neighbouring buildings costs you points.</p>
       <ul class="howto">
-        <li><b>Click</b> a column or floor slab to plant a charge. Click a charge to remove it.</li>
+        <li><b>Tap/click</b> a column or floor slab to plant a charge. Tap a charge to remove it.</li>
+        <li><b>Pinch</b> (or mouse wheel) to zoom, <b>drag</b> to move the camera.</li>
         <li><b>Strength</b> 1–10: columns need ≥3 to cut, slabs ≥4. Stronger = bigger blast, more flying debris.</li>
         <li><b>Fuse delay</b> lets you sequence the blasts — cut the middle first so it falls inward.</li>
         <li>Detonate before the <b>planning timer</b> runs out!</li>
       </ul>
       <button class="btn red big" id="btnPlay">PLAY</button>
-      <p class="keys">Keys: 1–0 strength · Space detonate · R retry · Esc levels · M music</p>
+      <p class="keys">Keys: 1–0 strength · Space detonate · +/− zoom · V reset view · R retry · Esc levels · M music</p>
     </div>
     <div class="card hidden" id="screenLevels">
       <h2>Choose a job</h2>

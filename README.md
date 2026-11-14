@@ -17,6 +17,9 @@ There is no build step. Either:
 | --- | --- | --- |
 | Plant a charge | Click/tap a column or floor slab | |
 | Remove a charge | Click/tap the charge | |
+| Zoom the camera | Pinch with two fingers / mouse wheel | `+` / `−` |
+| Move the camera | Drag with one finger / click-drag | |
+| Reset the camera | ⤢ button (shown while zoomed) | `V` |
 | Charge strength (1–10) | Slider | `1`–`9`, `0` = 10 |
 | Fuse delay (0–2 s) | Delay buttons | |
 | Detonate | 💥 DETONATE | `Space` |

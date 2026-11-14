@@ -225,7 +225,7 @@
     const sim = state.sim;
     for (const ch of sim.charges) {
       const cp = P.chargePos(ch);
-      if (Math.hypot(cp.x - p.x, cp.y - p.y) < 11) return { charge: ch };
+      if (Math.hypot(cp.x - p.x, cp.y - p.y) < Math.max(11, 16 / renderer.scale)) return { charge: ch };
     }
     const body = P.pieceAt(sim, p);
     if (!body) return null;
@@ -241,16 +241,28 @@
     return { body, point, weak };
   }
 
-  canvas.addEventListener('pointermove', (e) => {
+  // ---- Touch & mouse: tap = plant/remove, one-finger drag = pan, pinch = zoom ----
+  const pointers = new Map(); // pointerId -> {x, y}
+  let gesture = null; // { startX, startY, moved, pinchDist, button, pointerType }
+  const TAP_SLOP = 10;
+
+  function screenPos(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  function pinchInfo() {
+    const [a, b] = [...pointers.values()];
+    return { dist: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+  }
+
+  function updateHover(e) {
     if (state.phase !== 'plan') { state.hover = null; canvas.style.cursor = 'default'; return; }
     state.hover = computeHover(eventWorld(e));
-    canvas.style.cursor = state.hover && (state.hover.body || state.hover.charge) ? 'crosshair' : 'default';
-  });
-  canvas.addEventListener('pointerleave', () => { state.hover = null; });
-  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.style.cursor = state.hover && (state.hover.body || state.hover.charge) ? 'crosshair' : 'grab';
+  }
 
-  canvas.addEventListener('pointerdown', (e) => {
-    audio.unlock();
+  function tapAt(e) {
     if (state.phase !== 'plan') return;
     const h = computeHover(eventWorld(e));
     state.hover = h;
@@ -263,15 +275,84 @@
     } else if (h.wall) {
       audio.error();
       toast('Wall panels are just cladding — target columns and floor slabs');
-    } else if (h.body && e.button === 0) {
+    } else if (h.body) {
       const L = LEVELS[state.levelIndex];
       if (sim.charges.length >= L.maxCharges) { audio.error(); toast(`Charge limit reached (${L.maxCharges})`); return; }
       P.addCharge(sim, h.body, h.point, state.strength, state.delay);
       audio.place();
-      state.hover = computeHover(eventWorld(e));
+      state.hover = e.pointerType === 'mouse' ? computeHover(eventWorld(e)) : null;
     }
     updateHud();
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    audio.unlock();
+    if (e.button === 2) return;
+    canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, screenPos(e));
+    if (pointers.size === 1) {
+      const p = screenPos(e);
+      gesture = { startX: p.x, startY: p.y, lastX: p.x, lastY: p.y, moved: false, pinch: null, pointerType: e.pointerType };
+    } else if (pointers.size === 2 && gesture) {
+      gesture.moved = true; // a second finger turns this into a pinch, never a tap
+      gesture.pinch = pinchInfo();
+      state.hover = null;
+    }
   });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!pointers.has(e.pointerId)) { if (e.pointerType === 'mouse') updateHover(e); return; }
+    const p = screenPos(e);
+    pointers.set(e.pointerId, p);
+    if (!gesture) return;
+    if (pointers.size >= 2 && gesture.pinch) {
+      const now = pinchInfo();
+      if (gesture.pinch.dist > 0) renderer.zoomAt(now.mx, now.my, now.dist / gesture.pinch.dist);
+      renderer.panBy(now.mx - gesture.pinch.mx, now.my - gesture.pinch.my);
+      gesture.pinch = now;
+      return;
+    }
+    if (!gesture.moved && Math.hypot(p.x - gesture.startX, p.y - gesture.startY) > TAP_SLOP) {
+      gesture.moved = true;
+      state.hover = null;
+      canvas.style.cursor = 'grabbing';
+    }
+    if (gesture.moved) renderer.panBy(p.x - gesture.lastX, p.y - gesture.lastY);
+    else if (e.pointerType === 'mouse') updateHover(e);
+    gesture.lastX = p.x; gesture.lastY = p.y;
+  });
+
+  function endPointer(e, cancelled) {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    if (pointers.size === 1 && gesture) {
+      // one finger lifted out of a pinch: keep panning with the remaining finger
+      const [rest] = pointers.values();
+      gesture.pinch = null; gesture.lastX = rest.x; gesture.lastY = rest.y;
+      return;
+    }
+    if (pointers.size === 0 && gesture) {
+      if (!gesture.moved && !cancelled) tapAt(e);
+      gesture = null;
+      if (e.pointerType === 'mouse') updateHover(e);
+    }
+  }
+  canvas.addEventListener('pointerup', (e) => endPointer(e, false));
+  canvas.addEventListener('pointercancel', (e) => endPointer(e, true));
+  canvas.addEventListener('pointerleave', (e) => { if (!pointers.size) state.hover = null; });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Mouse wheel / trackpad pinch zoom on desktop
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const p = screenPos(e);
+    const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015));
+    renderer.zoomAt(p.x, p.y, factor);
+  }, { passive: false });
+
+  // Stop iOS Safari from zooming the whole page instead of the game
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault());
+  document.addEventListener('dblclick', (e) => e.preventDefault());
 
   window.addEventListener('keydown', (e) => {
     audio.unlock();
@@ -283,6 +364,9 @@
     else if (k === 'r' && state.sim && state.phase !== 'title') startLevel(state.levelIndex);
     else if (k === 'escape' && state.phase !== 'title') goLevels();
     else if (k === 'm') toggleMusic();
+    else if (k === 'v') renderer.resetCamera();
+    else if (k === '+' || k === '=') renderer.zoomAt(renderer.playCenter().x, renderer.playCenter().y, 1.25);
+    else if (k === '-') renderer.zoomAt(renderer.playCenter().x, renderer.playCenter().y, 0.8);
     else if (k === 's') toggleSfx();
   });
 
@@ -305,6 +389,7 @@
 
   function toggleMusic() { audio.unlock(); audio.setMusic(!audio.musicOn); $('btnMusic').classList.toggle('off', !audio.musicOn); }
   function toggleSfx() { audio.unlock(); audio.setSfx(!audio.sfxOn); $('btnSfx').classList.toggle('off', !audio.sfxOn); }
+  $('btnView').onclick = () => { audio.click(); renderer.resetCamera(); };
   $('btnMusic').onclick = toggleMusic;
   $('btnSfx').onclick = toggleSfx;
   window.addEventListener('resize', () => renderer.resize());
@@ -375,6 +460,7 @@
       sim: state.sim, phase: state.phase, hover: state.phase === 'plan' ? state.hover : null,
       strength: state.strength, delay: state.delay, showLot: state.phase === 'plan',
     });
+    $('btnView').classList.toggle('hidden', !renderer.isZoomed());
     updateHud();
     requestAnimationFrame(frame);
   }

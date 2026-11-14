@@ -10,6 +10,8 @@
     { wall: '#b8c4a8', trim: '#8d9c7a' },
   ];
 
+  const DEFAULT_VIEW = { x0: 290, x1: 1310, y0: 95, y1: 838 };
+
   function shadeHex(hex, f) {
     const n = parseInt(hex.slice(1), 16);
     const r = Math.min(255, Math.round(((n >> 16) & 255) * f));
@@ -42,6 +44,10 @@
     }
 
     resize() {
+      // Remember the player's camera so a resize (e.g. a phone's address bar
+      // sliding away, or rotating the device) doesn't throw it away.
+      const keep = this.base && this.base.view === (this.view || this.base.view) && this.zoom
+        ? { zoom: this.zoom, c: this.toWorld(this.playCenter().x, this.playCenter().y), moved: this.isZoomed() } : null;
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const w = window.innerWidth, h = window.innerHeight;
       this.canvas.width = Math.round(w * dpr);
@@ -53,12 +59,25 @@
       // Fit the interesting part of the world (the street) between the HUD and
       // the toolbar so nothing clickable is ever hidden behind the UI.
       const top = this.insetTop || 0, bottom = this.insetBottom || 0;
-      const view = this.view || { x0: 290, x1: 1310, y0: 95, y1: 838 };
+      const view = this.view || DEFAULT_VIEW;
       const availH = Math.max(200, h - top - bottom);
       const scale = Math.min(w / (view.x1 - view.x0), availH / (view.y1 - view.y0));
-      this.scale = scale;
-      this.ox = w / 2 - ((view.x0 + view.x1) / 2) * scale;
-      this.oy = top + availH / 2 - ((view.y0 + view.y1) / 2) * scale;
+      // Base framing; the player's pinch/pan camera sits on top of it.
+      this.base = {
+        scale,
+        ox: w / 2 - ((view.x0 + view.x1) / 2) * scale,
+        oy: top + availH / 2 - ((view.y0 + view.y1) / 2) * scale,
+        view,
+      };
+      this.resetCamera();
+      if (keep && keep.moved) {
+        this.zoom = keep.zoom;
+        this.scale = this.base.scale * keep.zoom;
+        const pc = this.playCenter();
+        this.ox = pc.x - keep.c.x * this.scale;
+        this.oy = pc.y - keep.c.y * this.scale;
+        this.clampCamera();
+      }
       this.skyline = null;
     }
 
@@ -77,12 +96,59 @@
       if (x1 - x0 < 760) { const c = (x0 + x1) / 2; x0 = c - 380; x1 = c + 380; }
       this.view = { x0, x1, y0, y1 };
       this.resize();
+      this.resetCamera();
     }
 
     setInsets(top, bottom) {
       if (top === this.insetTop && bottom === this.insetBottom) return;
       this.insetTop = top; this.insetBottom = bottom;
       this.resize();
+    }
+
+    // ---------------- Camera (pinch-zoom / pan) ----------------
+    resetCamera() {
+      this.zoom = 1;
+      this.scale = this.base.scale;
+      this.ox = this.base.ox;
+      this.oy = this.base.oy;
+    }
+
+    // Zoom by `factor` keeping the world point under screen point (sx, sy) fixed.
+    zoomAt(sx, sy, factor) {
+      const z = Math.max(0.6, Math.min(5, this.zoom * factor));
+      const w = this.toWorld(sx, sy);
+      this.zoom = z;
+      this.scale = this.base.scale * z;
+      this.ox = sx - w.x * this.scale;
+      this.oy = sy - w.y * this.scale;
+      this.clampCamera();
+    }
+
+    panBy(dx, dy) {
+      this.ox += dx;
+      this.oy += dy;
+      this.clampCamera();
+    }
+
+    // Keep the middle of the screen over the level so it can't be lost off-screen.
+    // Middle of the area not covered by the HUD and toolbar.
+    playCenter() {
+      const top = this.insetTop || 0, bottom = this.insetBottom || 0;
+      return { x: this.cw / 2, y: (top + this.ch - bottom) / 2 };
+    }
+
+    clampCamera() {
+      const v = this.base.view;
+      const pc = this.playCenter();
+      const c = this.toWorld(pc.x, pc.y);
+      const cx = Math.max(v.x0, Math.min(v.x1, c.x));
+      const cy = Math.max(v.y0, Math.min(WORLD.groundY, c.y));
+      this.ox += (c.x - cx) * this.scale;
+      this.oy += (c.y - cy) * this.scale;
+    }
+
+    isZoomed() {
+      return Math.abs(this.zoom - 1) > 0.01 || Math.abs(this.ox - this.base.ox) > 1 || Math.abs(this.oy - this.base.oy) > 1;
     }
 
     toWorld(sx, sy) {
