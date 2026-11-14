@@ -257,6 +257,7 @@
 
     sim.cols = cols; sim.slabs = slabs; sim.walls = walls;
     sim.totalMass = sim.pieces.reduce((s, b) => s + b.mass, 0);
+    sim.comX0 = sim.pieces.reduce((s, b) => s + b.mass * b.position.x, 0) / sim.totalMass;
   }
 
   function buildNeighbors(sim) {
@@ -286,6 +287,13 @@
       left: Math.max(sim.zone.left, sim.building.left - pad),
       right: Math.min(sim.zone.right, sim.building.right + pad),
     };
+    // Directional jobs: the building must be toppled into a marked drop zone.
+    if (sim.level.topple) {
+      const [d0, d1] = sim.level.dropZone;
+      sim.dropZone = { left: d0, right: d1, dir: sim.level.topple === 'left' ? -1 : 1 };
+      sim.lot.left = Math.min(sim.lot.left, d0);
+      sim.lot.right = Math.max(sim.lot.right, d1);
+    }
   }
 
   const CAR_COLORS = ['#e63946', '#457b9d', '#f4a261', '#2a9d8f', '#8338ec', '#ffbe0b'];
@@ -719,7 +727,7 @@
     for (const b of sim.cars) b.sleepThreshold = 30;
     const fh = sim.level.floorH;
     const fallen = (b) => b && b.plugin.piece && b.position.y - b.plugin.piece.y0 > fh * 0.5;
-    for (const j of sim.joints) if (fallen(j.c.bodyA) || fallen(j.c.bodyB)) breakJoint(sim, j);
+    for (const j of sim.joints) if (fallen(j.c.bodyA) && (!j.c.bodyB || fallen(j.c.bodyB))) breakJoint(sim, j);
     sim.joints = sim.joints.filter((j) => !j.broken);
   }
 
@@ -765,7 +773,7 @@
   // ---------- Scenes: what the renderer draws (live or from a replay frame) ----------
   function liveScene(sim) {
     return {
-      level: sim.level, lot: sim.lot, zone: sim.zone, building: sim.building, netting: sim.netting,
+      level: sim.level, lot: sim.lot, zone: sim.zone, building: sim.building, netting: sim.netting, dropZone: sim.dropZone,
       pieces: sim.pieces,
       cars: sim.cars.map((c) => ({ position: c.position, angle: c.angle, car: c.plugin.car, damage: c.plugin.car.damage })),
       people: sim.people,
@@ -800,9 +808,77 @@
     }
     const neighbors = sim.neighbors.map((n, i) => Object.assign({}, n, { cracks: n.cracks.slice(0, fr.nb[i][0]), flash: fr.nb[i][1] }));
     return {
-      level: sim.level, lot: sim.lot, zone: sim.zone, building: sim.building, netting: sim.netting,
+      level: sim.level, lot: sim.lot, zone: sim.zone, building: sim.building, netting: sim.netting, dropZone: sim.dropZone,
       pieces, cars, people: fr.people, neighbors, charges, t: fr.t,
     };
+  }
+
+  // ---------- Load X-ray ----------
+  // A tributary-area estimate of how much weight each column carries, and which
+  // columns will lose their support once the planted charges cut the ones below.
+  function willCut(ch) {
+    const pc = ch.body.plugin.piece;
+    return ch.type === 'cutter' || ch.strength >= pc.toughness;
+  }
+
+  function loadMap(sim) {
+    const L = sim.level, B = L.bays, F = L.floors, bw = L.bayW;
+    const share = (i) => ((i === 0 || i === B) ? 0.5 : 1) * bw;
+    // weight per unit width of one floor (slabs + cladding) and per column
+    const floorMass = [];
+    for (let f = 0; f < F; f++) {
+      const m = sim.slabs[f].reduce((a, b) => a + b.mass, 0) + sim.walls[f].reduce((a, b) => a + b.mass, 0);
+      floorMass[f] = m / (B * bw);
+    }
+    const colMass = sim.cols[0][0].mass;
+    const roofLoad = new Array(B + 1).fill(0);
+    for (const b of sim.pieces) {
+      const pc = b.plugin.piece;
+      if (!pc.roof) continue;
+      const i = Math.max(0, Math.min(B, Math.round((b.position.x - sim.building.left) / bw)));
+      roofLoad[i] += b.mass;
+    }
+    // which lines are cut, and from which floor up
+    const cutFrom = new Array(B + 1).fill(Infinity);
+    for (const ch of sim.charges) {
+      const pc = ch.body.plugin.piece;
+      if (pc.kind === 'column' && willCut(ch)) cutFrom[pc.line] = Math.min(cutFrom[pc.line], pc.floor);
+    }
+    const base = [];
+    let maxBase = 0;
+    for (let f = 0; f < F; f++) {
+      base[f] = [];
+      for (let i = 0; i <= B; i++) {
+        let load = roofLoad[i] + (F - 1 - f) * colMass;
+        for (let g = f; g < F; g++) load += floorMass[g] * share(i);
+        base[f][i] = load;
+        maxBase = Math.max(maxBase, load);
+      }
+    }
+    const out = new Map();
+    for (let f = 0; f < F; f++) {
+      const load = base[f].slice();
+      // load from cut lines is shed to the nearest surviving lines on that floor
+      for (let i = 0; i <= B; i++) {
+        if (cutFrom[i] > f) continue;
+        const nbrs = [];
+        for (let d = 1; d <= B && nbrs.length === 0; d++) {
+          if (i - d >= 0 && cutFrom[i - d] > f) nbrs.push(i - d);
+          if (i + d <= B && cutFrom[i + d] > f) nbrs.push(i + d);
+        }
+        for (const n of nbrs) load[n] += base[f][i] / nbrs.length;
+      }
+      for (let i = 0; i <= B; i++) {
+        const col = sim.cols[f][i];
+        out.set(col, {
+          ratio: load[i] / maxBase,
+          cut: cutFrom[i] === f,
+          drops: cutFrom[i] < f, // supported by a column that will be cut
+          overloaded: cutFrom[i] > f && load[i] > base[f][i] * 1.6,
+        });
+      }
+    }
+    return out;
   }
 
   // ---------- Scoring ----------
@@ -829,12 +905,22 @@
     const used = spent(sim);
     const underBudget = sim.charges.length === 0 ? 0 : Math.max(0, 1 - used / budget);
 
-    const collapsePts = Math.round(collapse * 400);
-    const containPts = Math.round(Math.pow(contain, 2) * 400 * collapse);
+    // Directional jobs: how far the wreckage moved toward the drop zone.
+    let direction = null, directionPts = 0, wrongWay = false;
+    if (sim.dropZone) {
+      let m = 0, mx = 0;
+      for (const b of sim.pieces) { m += b.mass; mx += b.mass * b.position.x; }
+      const shift = ((m ? mx / m : sim.comX0) - sim.comX0) * sim.dropZone.dir;
+      direction = Math.max(0, Math.min(1, shift / (H * 0.3)));
+      wrongWay = shift < -H * 0.05;
+      directionPts = Math.round(direction * 250 * collapse);
+    }
+    const collapsePts = Math.round(collapse * (sim.dropZone ? 350 : 400));
+    const containPts = Math.round(Math.pow(contain, 2) * (sim.dropZone ? 300 : 400) * collapse);
     const budgetPts = Math.round(underBudget * 200 * collapse);
     const penalty = Math.min(sim.penalty, 9999);
-    const score = Math.max(0, collapsePts + containPts + budgetPts - penalty);
-    const success = collapse >= 0.6;
+    const score = Math.max(0, collapsePts + containPts + directionPts + budgetPts - penalty);
+    const success = collapse >= 0.6 && (!sim.dropZone || direction >= 0.4);
     let stars = 0;
     if (success) {
       stars = 1;
@@ -844,7 +930,7 @@
     return {
       collapse, contain, underBudget, spent: used, budget, rubbleHeight: rubble, hits: sim.hits.length,
       carHits: sim.carHits, bystanders: sim.bystanders,
-      collapsePts, containPts, budgetPts, penalty,
+      collapsePts, containPts, budgetPts, penalty, direction, directionPts, wrongWay, directional: !!sim.dropZone,
       neighborPen: sim.neighborPen, carPen: sim.carPen, bystanderPen: sim.bystanderPen,
       score, success, stars,
     };
@@ -854,7 +940,7 @@
     WORLD, COL_W, SLAB_H, MATERIALS, CHARGE_TYPES, NETTING_COST, BYSTANDER_PENALTY,
     createSim, step, allowSleep, pieceAt, addCharge, chargePos, chargeCost, spent, detonate, evaluate, kineticLevel,
     updatePeople, personAt, shoo, shooAll, bystandersAtBlast, peopleInZone,
-    startRecording, stopRecording, liveScene, frameScene,
+    startRecording, stopRecording, liveScene, frameScene, loadMap,
   };
   root.DemoPhysics = API;
   if (typeof module !== 'undefined') module.exports = API;

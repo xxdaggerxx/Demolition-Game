@@ -158,3 +158,21 @@ button { font-family: inherit; cursor: pointer; }
   #btnDetonate { white-space: nowrap; }
   #hud { right: 170px; }
 }
+
+/* Load X-ray legend */
+#xrayLegend { position: fixed; left: 10px; top: 86px; background: rgba(10,25,45,0.88); color: #dff1ff; border: 2px solid #3a2a1a;
+  border-radius: 12px; padding: 8px 10px; font-size: 12px; line-height: 1.6; pointer-events: none; }
+#xrayLegend .bar { display: flex; justify-content: space-between; width: 150px; padding: 0 4px; border-radius: 6px; color: #10202f; font-weight: 800;
+  background: linear-gradient(90deg, hsl(120,90%,55%), hsl(60,90%,55%), hsl(0,90%,55%)); }
+#xrayLegend .sw { display: inline-block; width: 12px; height: 12px; vertical-align: -2px; margin-right: 4px; border-radius: 2px; }
+#xrayLegend .sw.drop { background: rgba(200,120,255,0.6); border: 1px dashed #c77dff; }
+#xrayLegend .sw.cut { background: rgba(255,255,255,0.25); border: 1px solid #fff; }
+#xrayLegend .sw.over { background: hsl(0,90%,55%); border: 2px solid #fff; }
+@media (max-height: 520px) { #xrayLegend { top: 50px; font-size: 10px; padding: 4px 8px; line-height: 1.4; } }
+
+/* News ticker on the results card */
+.ticker { display: flex; align-items: stretch; margin: -6px -10px 12px; border: 2px solid #3a2a1a; border-radius: 10px; overflow: hidden; background: #1d1d26; }
+.ticker .tag { background: #d62828; color: #fff; font-weight: 900; font-size: 13px; padding: 6px 10px; letter-spacing: 1px; flex: none; z-index: 1; }
+.ticker .tk { overflow: hidden; flex: 1; position: relative; }
+#tickerText { display: inline-block; white-space: nowrap; color: #ffd23f; font-weight: 700; font-size: 14px; padding: 6px 0 6px 100%; animation: ticker linear infinite; }
+@keyframes ticker { to { transform: translateX(-100%); } }

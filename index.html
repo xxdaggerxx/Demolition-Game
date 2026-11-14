@@ -47,6 +47,7 @@
       <div class="hint">Stagger charges to steer the fall</div>
     </div>
     <div class="group actions">
+      <button id="btnXray" class="btn small hidden" title="Load X-ray (X)">🩻<span class="tx"> X-ray</span></button>
       <button id="btnNetting" class="btn small hidden" title="Hang debris netting on the neighbours">🕸 Netting</button>
       <button id="btnMegaphone" class="btn small hidden" title="Clear all bystanders">📢<span class="tx"> Clear area</span></button>
       <button id="btnClear" class="btn">Clear</button>
@@ -67,6 +68,14 @@
       <button data-s="1">1×</button>
     </div>
     <button id="rpDone" class="btn small red">Done</button>
+  </div>
+
+  <div id="xrayLegend" class="hidden">
+    <b>🩻 Load X-ray</b>
+    <div class="bar"><span>light</span><span>heavy</span></div>
+    <div><i class="sw drop"></i> loses support — will drop</div>
+    <div><i class="sw cut"></i> cut by a charge</div>
+    <div><i class="sw over"></i> overloaded (flashing)</div>
   </div>
 
   <div id="countdown" class="hidden"></div>
@@ -107,6 +116,7 @@
       <button class="btn" id="btnShopBack">Back to jobs</button>
     </div>
     <div class="card hidden" id="screenResult">
+      <div class="ticker"><span class="tag">BREAKING</span><div class="tk"><span id="tickerText"></span></div></div>
       <h2 id="resTitle">Demolished!</h2>
       <div id="resStars" class="stars"></div>
       <table id="resTable"></table>

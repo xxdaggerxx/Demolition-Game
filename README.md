@@ -43,6 +43,7 @@ There is no build step. Either:
 | 📢 Megaphone | $800 | “Clear area” button that shoos every bystander at once |
 | ⏱ Overtime Permit | $1,500 | +30 s planning time |
 | 🎛 Precision Detonator | $2,000 | Finer fuse delays (0.1, 0.75, 2.5, 3 s) |
+| 🩻 Load X-ray | $2,500 | Colours each column by the weight it carries and shows which ones will lose support (`X` key) |
 | 🔻 Shaped Charges | $3,500 | Blast is focused toward the building's centre, so less debris flies outward |
 | 🕸 Debris Netting | $4,000 | Nets on the neighbours ($600 per job); hits on them cost ~90% less |
 | ✂ Cutter Charges | $5,000 | Slices any member, even steel, with almost no blast |
@@ -59,6 +60,19 @@ There is no build step. Either:
 - **Bystanders** wander into the danger zone while you plan. Tap them to send them away.
   Anyone still in the zone at detonation costs 75 points.
 - The **historic church** next to the Old Brick Mill doubles neighbour-hit penalties.
+
+### Directional jobs
+
+Jobs 7 and 8 ask you to **topple** the building into a marked **drop zone** instead of
+imploding it. Cut the columns on the drop-zone side (a wedge over the first floor or two)
+and leave the far side standing as a hinge. A straight-down implosion, or a fall the wrong
+way, fails the job.
+
+### News ticker
+
+The results screen opens with a scrolling **BREAKING NEWS** ticker. Its headlines are
+written from what actually happened: a clean implosion, a wrong-way topple, a cracked
+church steeple, flattened cars, fleeing spectators, money saved, and so on.
 
 ### Instant replay
 
@@ -106,7 +120,7 @@ audio files.
 ```
 index.html        UI shell (HUD, toolbar, menus)
 css/style.css     styling
-js/levels.js      the six demolition jobs
+js/levels.js      the eight demolition jobs
 js/physics.js     building materials, explosives, collapse, cars, bystanders, replay
                   recording and scoring (also runs in Node)
 js/render.js      canvas renderer, particles, dust and camera shake

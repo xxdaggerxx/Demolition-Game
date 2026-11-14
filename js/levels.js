@@ -82,6 +82,34 @@
       people: { every: 6, max: 4 },
       budget: 4000, maxCharges: 12, planTime: 120,
     },
+    {
+      id: 7,
+      name: 'Lean on Me',
+      blurb: 'DIRECTIONAL JOB: topple this block LEFT into the empty lot. Cut the left side first and leave the right side as a hinge.',
+      material: 'concrete', bays: 3, floors: 7, bayW: 60, floorH: 56, x: 920, lotPad: 25,
+      topple: 'left', dropZone: [425, 805],
+      neighbors: [
+        { x: 330, w: 150, h: 260, color: '#ffbe0b', style: 'office' },
+        { x: 1110, w: 140, h: 300, color: '#8338ec', style: 'brick' },
+      ],
+      cars: [],
+      people: { every: 7, max: 3 },
+      budget: 2800, maxCharges: 10, planTime: 110,
+    },
+    {
+      id: 8,
+      name: 'Timber!',
+      blurb: 'DIRECTIONAL JOB: fell this tall brick tower RIGHT, along the empty lot. It is narrow and tall — the hinge matters!',
+      material: 'brick', bays: 2, floors: 10, bayW: 46, floorH: 52, x: 560, lotPad: 18,
+      topple: 'right', dropZone: [625, 1190],
+      neighbors: [
+        { x: 420, w: 150, h: 280, color: '#3a86ff', style: 'glass' },
+        { x: 1290, w: 150, h: 320, color: '#ff6b6b', style: 'brick' },
+      ],
+      cars: [],
+      people: { every: 6, max: 3 },
+      budget: 2400, maxCharges: 10, planTime: 110,
+    },
   ];
   root.LEVELS = LEVELS;
   if (typeof module !== 'undefined') module.exports = LEVELS;

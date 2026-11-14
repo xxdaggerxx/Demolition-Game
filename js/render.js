@@ -89,6 +89,7 @@
       const bw = level.bays * level.bayW;
       let x0 = Math.min(level.x - bw / 2, ...ns.map((n) => n.x - n.w / 2)) - 70;
       let x1 = Math.max(level.x + bw / 2, ...ns.map((n) => n.x + n.w / 2)) + 70;
+      if (level.dropZone) { x0 = Math.min(x0, level.dropZone[0] - 70); x1 = Math.max(x1, level.dropZone[1] + 70); }
       const topY = WORLD.groundY - Math.max(level.floors * level.floorH + (level.roof ? 50 : 0),
         ...ns.map((n) => n.h + (n.style === 'church' ? 170 : 0)));
       let y0 = topY - 60;
@@ -275,6 +276,7 @@
       if (sc) {
         this.drawNeighbors(ctx, sc);
         this.drawBuilding(ctx, sc, state);
+        if (state.xray) this.drawXray(ctx, sc, state.xray);
         this.drawCars(ctx, sc);
         this.drawCharges(ctx, sc, state);
         if (state.hover) this.drawHover(ctx, state.hover, state);
@@ -379,6 +381,7 @@
         ctx.beginPath(); ctx.moveTo(left, 40); ctx.lineTo(left, gy); ctx.moveTo(right, 40); ctx.lineTo(right, gy); ctx.stroke();
         ctx.setLineDash([]);
       }
+      if (sc.dropZone) this.drawDropZone(ctx, sc.dropZone, state);
       for (const x of [left, right]) {
         ctx.save();
         ctx.translate(x, gy - 16);
@@ -388,6 +391,90 @@
         ctx.fillRect(-9, -2, 4, 7); ctx.fillRect(-1, -2, 4, 7); ctx.fillRect(7, -2, 2, 7);
         ctx.restore();
       }
+    }
+
+    drawDropZone(ctx, dz, state) {
+      const gy = WORLD.groundY;
+      const w = dz.right - dz.left;
+      // gravel target area with yellow/black edges
+      ctx.fillStyle = '#c9a66b';
+      ctx.fillRect(dz.left, gy, w, 12);
+      ctx.fillStyle = '#ffd23f';
+      for (let x = dz.left; x < dz.right; x += 24) ctx.fillRect(x, gy + 1, 12, 3);
+      // chevrons pointing the way the building must fall
+      const pulse = 0.55 + 0.45 * Math.sin(this.time * 4);
+      ctx.fillStyle = `rgba(255,120,30,${state.showLot ? 0.35 + pulse * 0.4 : 0.25})`;
+      for (let x = dz.left + 30; x < dz.right - 20; x += 46) {
+        ctx.beginPath();
+        if (dz.dir < 0) { ctx.moveTo(x, gy - 20); ctx.lineTo(x + 14, gy - 32); ctx.lineTo(x + 20, gy - 32); ctx.lineTo(x + 6, gy - 20); ctx.lineTo(x + 20, gy - 8); ctx.lineTo(x + 14, gy - 8); }
+        else { ctx.moveTo(x + 20, gy - 20); ctx.lineTo(x + 6, gy - 32); ctx.lineTo(x, gy - 32); ctx.lineTo(x + 14, gy - 20); ctx.lineTo(x, gy - 8); ctx.lineTo(x + 6, gy - 8); }
+        ctx.closePath(); ctx.fill();
+      }
+      // sign
+      const sx = dz.dir < 0 ? dz.left + 40 : dz.right - 40;
+      ctx.fillStyle = '#4a4e57';
+      ctx.fillRect(sx - 2, gy - 70, 4, 70);
+      ctx.fillStyle = '#ff7b00'; ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(sx - 38, gy - 96, 76, 30, 5); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 11px system-ui, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('DROP ZONE', sx, gy - 84);
+      ctx.font = 'bold 12px system-ui, sans-serif';
+      ctx.fillText(dz.dir < 0 ? '◀ ◀ ◀' : '▶ ▶ ▶', sx, gy - 70);
+    }
+
+    // X-ray overlay: columns coloured by the share of the building's weight they carry.
+    drawXray(ctx, sc, loads) {
+      const b = sc.building;
+      ctx.save();
+      ctx.fillStyle = 'rgba(10,25,45,0.72)';
+      ctx.fillRect(b.left - 14, b.top - 60, b.right - b.left + 28, WORLD.groundY - b.top + 60);
+      // faint slabs
+      for (const p of sc.pieces) {
+        const pc = p.plugin.piece;
+        if (pc.kind !== 'slab' && !pc.roof) continue;
+        ctx.save(); ctx.translate(p.position.x, p.position.y); ctx.rotate(p.angle);
+        ctx.strokeStyle = 'rgba(120,200,255,0.6)'; ctx.lineWidth = 1;
+        ctx.strokeRect(-pc.w / 2, -pc.h / 2, pc.w, pc.h);
+        ctx.restore();
+      }
+      const heat = (r) => {
+        const t = Math.max(0, Math.min(1, r));
+        const h = 120 - 120 * t; // green -> red
+        return `hsl(${h},90%,55%)`;
+      };
+      ctx.textAlign = 'center';
+      for (const [col, info] of loads) {
+        const pc = col.plugin.piece;
+        ctx.save(); ctx.translate(col.position.x, col.position.y); ctx.rotate(col.angle);
+        if (info.drops) {
+          ctx.fillStyle = 'rgba(200,120,255,0.35)';
+          ctx.fillRect(-pc.w / 2, -pc.h / 2, pc.w, pc.h);
+          ctx.strokeStyle = '#c77dff'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 2]);
+          ctx.strokeRect(-pc.w / 2, -pc.h / 2, pc.w, pc.h); ctx.setLineDash([]);
+          ctx.fillStyle = '#e0b3ff'; ctx.font = 'bold 12px system-ui, sans-serif';
+          ctx.fillText('↓', 0, 4);
+        } else if (info.cut) {
+          ctx.fillStyle = 'rgba(255,255,255,0.15)';
+          ctx.fillRect(-pc.w / 2, -pc.h / 2, pc.w, pc.h);
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(-pc.w / 2, -4); ctx.lineTo(pc.w / 2, 4); ctx.stroke();
+        } else {
+          ctx.fillStyle = heat(info.ratio);
+          if (info.overloaded) ctx.globalAlpha = 0.6 + 0.4 * Math.sin(this.time * 10);
+          ctx.fillRect(-pc.w / 2, -pc.h / 2, pc.w, pc.h);
+          ctx.globalAlpha = 1;
+          if (info.overloaded) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(-pc.w / 2, -pc.h / 2, pc.w, pc.h); }
+        }
+        ctx.restore();
+        if (!info.drops && !info.cut) {
+          ctx.font = 'bold 8px system-ui, sans-serif';
+          ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.fillStyle = '#fff';
+          const label = Math.round(info.ratio * 100) + '%';
+          ctx.strokeText(label, col.position.x, col.position.y + 3);
+          ctx.fillText(label, col.position.x, col.position.y + 3);
+        }
+      }
+      ctx.restore();
     }
 
     drawNeighbors(ctx, sc) {

@@ -18,6 +18,8 @@
       desc: '+30 seconds of planning time on every job.' },
     { id: 'detonator', icon: '🎛', name: 'Precision Detonator', price: 2000,
       desc: 'Finer fuse delays: 0.1s, 0.75s, 2.5s and 3s for perfectly sequenced implosions.' },
+    { id: 'xray', icon: '🩻', name: 'Load X-ray', price: 2500,
+      desc: 'See how much weight every column carries, and which ones will lose their support once your charges go off.' },
     { id: 'shaped', icon: '🔻', name: 'Shaped Charges', price: 3500,
       desc: 'Copper-lined charges that focus the blast toward the middle of the building — far less debris thrown outward. Cost 60% more per charge.' },
     { id: 'netting', icon: '🕸', name: 'Debris Netting', price: 4000,
@@ -41,6 +43,7 @@
     strength: 3,
     delay: 0,
     chargeType: 'standard',
+    xray: false,
     hover: null,
     planLeft: 0,
     planTime: 0,
@@ -83,7 +86,7 @@
       b.disabled = locked;
       const stars = best ? '★'.repeat(best.stars) + '☆'.repeat(3 - best.stars) : '☆☆☆';
       const mat = P.MATERIALS[L.material || 'concrete'].name;
-      b.innerHTML = `<span class="n">Job ${L.id}${locked ? ' 🔒' : ''} · ${mat}</span><span class="t">${L.name}</span>
+      b.innerHTML = `<span class="n">Job ${L.id}${locked ? ' 🔒' : ''} · ${mat}${L.topple ? ' · ↔ Directional' : ''}</span><span class="t">${L.name}</span>
         <span class="s">${stars}</span><br><span class="b">${best ? 'Best: ' + best.score + ' · ' : ''}Budget ${money(L.budget)}</span>`;
       b.onclick = () => { audio.click(); startLevel(i); };
       grid.appendChild(b);
@@ -163,6 +166,8 @@
     }
     if (state.chargeType !== 'standard' && !owns(state.chargeType)) state.chargeType = 'standard';
     $('btnNetting').classList.toggle('hidden', !owns('netting'));
+    $('btnXray').classList.toggle('hidden', !owns('xray'));
+    $('btnXray').classList.toggle('on', state.xray);
     $('btnMegaphone').classList.toggle('hidden', !owns('megaphone'));
     if (state.sim) $('btnNetting').classList.toggle('on', state.sim.netting);
     $('btnNetting').innerHTML = `🕸<span class="tx"> Netting ${state.sim && state.sim.netting ? 'ON' : money(P.NETTING_COST)}</span>`;
@@ -299,8 +304,9 @@
     audio.jingle(ev.success);
 
     $('resTitle').textContent = ev.success
-      ? (ev.stars === 3 ? 'Perfect implosion!' : ev.penalty === 0 ? 'Clean job!' : 'Demolished!')
-      : 'Building still standing!';
+      ? (ev.directional ? (ev.stars === 3 ? 'Bullseye! Right on target!' : 'Toppled!') : ev.stars === 3 ? 'Perfect implosion!' : ev.penalty === 0 ? 'Clean job!' : 'Demolished!')
+      : ev.directional && ev.collapse >= 0.6 ? (ev.wrongWay ? 'It fell the wrong way!' : 'Missed the drop zone!')
+        : 'Building still standing!';
     const starsEl = $('resStars');
     starsEl.innerHTML = '';
     for (let i = 0; i < 3; i++) {
@@ -313,6 +319,7 @@
     const rows = [
       ['Collapse', pct(ev.collapse), ev.collapsePts],
       ['Debris kept on the lot', pct(ev.contain), ev.containPts],
+      ...(ev.directional ? [[`Toppled ${L.topple} into the drop zone`, pct(ev.direction), ev.directionPts]] : []),
       ['Under budget', `${money(ev.spent)} of ${money(ev.budget)}`, ev.budgetPts],
       ['Hits on neighbours', String(ev.hits), -ev.neighborPen],
     ];
@@ -321,7 +328,10 @@
     rows.push(['Time bonus', Math.round(state.detonatedWithLeft) + 's left', timeBonus]);
     $('resTable').innerHTML = rows.map(([a, b, c]) =>
       `<tr><td>${a}</td><td>${b}</td><td class="${c < 0 ? 'neg' : ''}">${c > 0 ? '+' : ''}${c}</td></tr>`).join('');
-    $('resTotal').textContent = ev.success ? `Score: ${total}` : 'Collapse at least 60% of the building to pass';
+    $('resTotal').textContent = ev.success ? `Score: ${total}`
+      : ev.directional && ev.collapse >= 0.6 ? `Topple it ${L.topple.toUpperCase()} into the drop zone to pass`
+        : 'Collapse at least 60% of the building to pass';
+    setTicker(headlines(ev, L, sim, timeBonus));
 
     const prev = progress.best[L.id];
     let bestMsg = prev ? `Best: ${prev.score}` : '';
@@ -345,6 +355,58 @@
     $('btnReplay').classList.toggle('hidden', !state.rec || state.rec.frames.length < 2);
     if (pay) setTimeout(() => audio.cash(), 900);
     setTimeout(() => { if (state.phase === 'result') showScreen('screenResult'); }, 600);
+  }
+
+  // ---------------- News ticker ----------------
+  function headlines(ev, L, sim, timeBonus) {
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    const n = L.name;
+    const out = [];
+    if (!ev.success) {
+      if (ev.directional && ev.collapse >= 0.6) {
+        out.push(ev.wrongWay
+          ? pick([`${n} topples the WRONG way — neighbours duck for cover`, `Oops! ${n} falls backwards as crowd gasps`, `Compass trouble? ${n} goes the other way`])
+          : pick([`${n} misses its drop zone by a mile`, `${n} crumples on the spot instead of toppling`, `“It was supposed to lean,” admits red-faced foreman`]));
+      } else {
+        out.push(pick([`Embarrassment: ${n} refuses to fall`, `${n} still standing after demolition “fizzles”`,
+          `Locals jeer as ${n} shrugs off explosives`, `Dust settles, ${n} doesn't`]));
+      }
+    } else if (ev.directional) {
+      out.push(ev.stars === 3 ? pick([`TIMBER! ${n} lands right on target`, `Bullseye! ${n} topples neatly into empty lot`])
+        : pick([`${n} felled ${L.topple}ward to applause`, `Crowd yells “TIMBER!” as ${n} goes down`]));
+    } else if (ev.stars === 3) {
+      out.push(pick([`Textbook implosion! ${n} drops into its own footprint`, `${n} vanishes in seconds — experts call it “flawless”`,
+        `Not a scratch next door as ${n} comes down`]));
+    } else {
+      out.push(pick([`${n} demolished, crews begin cleanup`, `Goodbye, ${n}: landmark reduced to rubble`, `${n} comes down in a cloud of dust`]));
+    }
+    const church = sim.neighbors.find((x) => x.fragile && x.damage > 0);
+    if (church) out.push(pick(['Historic church damaged — mayor “absolutely furious”', 'Steeple cracked! Heritage society demands answers']));
+    if (ev.hits >= 4) out.push(pick([`Neighbours furious as debris smashes ${ev.hits} windows`, 'Building next door “looks like Swiss cheese,” says owner']));
+    else if (ev.hits > 0) out.push(pick(['Minor damage next door: “just a few scratches,” insists foreman', 'Neighbour reports chipped paint, demands new paint job']));
+    if (ev.carHits) out.push(pick([`${ev.carHits} hit${ev.carHits > 1 ? 's' : ''} on parked cars — insurers groan`, 'Car alarms wail across the block', 'Motorist returns to find car “slightly flatter”']));
+    if (ev.bystanders) out.push(pick(['Spectators flee dust cloud — safety officials investigate', `${ev.bystanders} onlooker${ev.bystanders > 1 ? 's' : ''} sprint from blast zone, hair “very dusty”`]));
+    if (L.material === 'glass' && ev.success) out.push('Glass rain! Shards sparkle across the street');
+    if (L.material === 'steel' && ev.success) out.push(sim.charges.some((c) => c.type === 'cutter') ? 'Precision cutters slice steel frame like butter' : 'Steel giant buckles under heavy charges');
+    if (L.roof === 'tank' && ev.success) out.push('Rooftop water tank takes its final plunge');
+    if (ev.success && ev.underBudget >= 0.4) out.push(`Demolition firm finishes ${money(ev.budget - ev.spent)} under budget`);
+    if (ev.success && timeBonus >= 75) out.push(`Speedy crew blows ${n} in record time`);
+    if (ev.penalty === 0 && ev.success) out.push('Safety inspector: “Zero incidents. Remarkable.”');
+    out.push(pick(['Local bakery reports record sales to dust-covered onlookers', 'Pigeons demand compensation for lost rooftop',
+      'Weather: clear skies, with a 100% chance of dust', 'Traffic: expect delays near the demolition site', 'Construction cranes already circling the empty lot']));
+    const change = ev.success ? `▲ ${(ev.stars * 1.7 + Math.random() * 2 + 0.3).toFixed(1)}%` : `▼ ${(3 + Math.random() * 4).toFixed(1)}%`;
+    out.push(`IMPLODE CO. ${change}`);
+    return out;
+  }
+
+  function setTicker(items) {
+    const el = $('tickerText');
+    const text = items.join('   •   ');
+    el.textContent = text;
+    el.style.animation = 'none';
+    void el.offsetWidth; // restart the animation
+    el.style.animation = '';
+    el.style.animationDuration = Math.max(12, text.length * 0.16) + 's';
   }
 
   function goLevels() {
@@ -624,6 +686,7 @@
     else if (k === '+' || k === '=') renderer.zoomAt(renderer.playCenter().x, renderer.playCenter().y, 1.25);
     else if (k === '-') renderer.zoomAt(renderer.playCenter().x, renderer.playCenter().y, 0.8);
     else if (k === 's') toggleSfx();
+    else if (k === 'x') toggleXray();
   });
 
   $('strength').addEventListener('input', (e) => { state.strength = +e.target.value; updateStrengthUi(); });
@@ -636,6 +699,13 @@
       refreshToolbar();
     });
   }
+  function toggleXray() {
+    if (!owns('xray') || state.phase !== 'plan') return;
+    state.xray = !state.xray;
+    audio.click();
+    refreshToolbar();
+  }
+  $('btnXray').onclick = toggleXray;
   $('btnNetting').onclick = () => {
     if (state.phase !== 'plan') return;
     const sim = state.sim;
@@ -782,7 +852,10 @@
     const scene = state.phase === 'replay'
       ? P.frameScene(sim, state.rec, frameIndexAt(state.rec, state.replay.t))
       : P.liveScene(sim);
+    const xrayOn = state.xray && state.phase === 'plan' && owns('xray');
+    $('xrayLegend').classList.toggle('hidden', !xrayOn);
     renderer.draw({
+      xray: xrayOn ? P.loadMap(sim) : null,
       scene, phase: state.phase, hover: state.phase === 'plan' ? state.hover : null,
       strength: state.strength, delay: state.delay, chargeType: state.chargeType, showLot: state.phase === 'plan',
     });
