@@ -23,7 +23,7 @@ There is no build step. Either:
 | Charge strength (1–10) | Slider | `1`–`9`, `0` = 10 |
 | Fuse delay (0–2 s) | Delay buttons | |
 | Detonate | 💥 DETONATE | `Space` |
-| Retry / level select | | `R` / `Esc` |
+| Retry (keeps your charge layout) / level select | Retry button | `R` / `Esc` |
 | Music / sound effects | ♫ / 🔊 buttons | `M` / `S` |
 
 | Shoo a bystander | Tap/click the person | |

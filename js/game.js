@@ -175,7 +175,49 @@
   }
 
   // ---------------- Level flow ----------------
-  function startLevel(i) {
+  // ---------------- Saving / restoring a charge layout (for Retry) ----------------
+  // Members are identified by kind + floor + column line / bay, so the layout can be
+  // re-planted on a freshly built copy of the same building.
+  function memberKey(pc) {
+    return `${pc.kind}:${pc.floor}:${pc.kind === 'column' ? pc.line : pc.kind === 'slab' ? pc.bay : 0}`;
+  }
+
+  function snapshotSetup(sim) {
+    return {
+      levelId: sim.level.id,
+      netting: sim.netting,
+      charges: sim.charges.map((c) => ({
+        key: memberKey(c.body.plugin.piece), local: { x: c.local.x, y: c.local.y },
+        strength: c.type === 'cutter' ? state.strength : c.strength, delay: c.delay, type: c.type,
+      })),
+    };
+  }
+
+  function restoreSetup(sim, setup) {
+    const byKey = new Map(sim.pieces.map((b) => [memberKey(b.plugin.piece), b]));
+    const budget = LEVELS[state.levelIndex].budget;
+    let skipped = 0;
+    if (setup.netting && owns('netting')) sim.netting = true;
+    for (const c of setup.charges) {
+      const body = byKey.get(c.key);
+      const typeOk = c.type === 'standard' || owns(c.type);
+      const cost = P.chargeCost(c.type, c.strength);
+      if (!body || !typeOk || P.spent(sim) + cost > budget || sim.charges.length >= LEVELS[state.levelIndex].maxCharges) { skipped++; continue; }
+      const world = Matter.Vector.add(body.position, Matter.Vector.rotate(c.local, body.angle));
+      P.addCharge(sim, body, world, c.strength, c.delay, c.type);
+    }
+    return skipped;
+  }
+
+  // Retry keeps the layout from the last detonation (or the one being planned).
+  function retryLevel() {
+    let setup = null;
+    if (state.phase === 'plan' && state.sim && state.sim.charges.length) setup = snapshotSetup(state.sim);
+    else if (state.lastSetup && state.lastSetup.levelId === LEVELS[state.levelIndex].id) setup = state.lastSetup;
+    startLevel(state.levelIndex, setup);
+  }
+
+  function startLevel(i, setup) {
     const L = LEVELS[i];
     state.levelIndex = i;
     state.sim = P.createSim(L, (Math.random() * 1e9) | 0);
@@ -198,10 +240,17 @@
     $('levelName').textContent = `${L.id}. ${L.name}`;
     $('timerLabel').textContent = 'Planning time';
     buildDelays();
+    let restored = 0, skipped = 0;
+    if (setup && setup.levelId === L.id) {
+      skipped = restoreSetup(state.sim, setup);
+      restored = state.sim.charges.length;
+    }
     setControlsEnabled(true);
     updateHud();
     audio.setMode('plan');
-    toast(L.blurb, 4000);
+    if (restored) {
+      toast(`🔁 Your previous setup is back (${restored} charge${restored > 1 ? 's' : ''}${skipped ? `, ${skipped} couldn't be re-placed` : ''}). Tweak it or detonate!`, 3500);
+    } else toast(L.blurb, 4000);
   }
 
   function budgetLeft() {
@@ -214,6 +263,7 @@
     state.phase = 'countdown';
     state.countdown = 3;
     state.detonatedWithLeft = state.planLeft;
+    state.lastSetup = snapshotSetup(state.sim);
     state.hover = null;
     setControlsEnabled(false);
     audio.setMode('tense');
@@ -566,7 +616,7 @@
       updateStrengthUi();
     } else if (k === ' ' && state.phase === 'plan') { e.preventDefault(); detonate(); }
     else if (k === ' ' && state.phase === 'replay') { e.preventDefault(); $('rpPlay').click(); }
-    else if (k === 'r' && state.sim && state.phase !== 'title') startLevel(state.levelIndex);
+    else if (k === 'r' && state.sim && state.phase !== 'title') retryLevel();
     else if (k === 'escape' && state.phase === 'replay') endReplay();
     else if (k === 'escape' && state.phase !== 'title') goLevels();
     else if (k === 'm') toggleMusic();
@@ -608,7 +658,7 @@
   $('btnShop').onclick = () => { audio.click(); buildShop(); showScreen('screenShop'); };
   $('btnShopBack').onclick = () => { audio.click(); buildLevelGrid(); showScreen('screenLevels'); };
   $('btnLevels').onclick = () => { audio.click(); goLevels(); };
-  $('btnRetry').onclick = () => { audio.click(); startLevel(state.levelIndex); };
+  $('btnRetry').onclick = () => { audio.click(); retryLevel(); };
   $('btnNext').onclick = () => { audio.click(); startLevel(state.levelIndex + 1); };
   $('btnMenu').onclick = () => { audio.click(); goLevels(); };
   $('btnReplay').onclick = () => { audio.click(); startReplay(); };
