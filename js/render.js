@@ -86,11 +86,11 @@
     setLevel(level) {
       if (!level) { this.view = null; this.resize(); return; }
       const ns = level.neighbors;
-      const bw = level.bays * level.bayW;
+      const bw = level.structure === 'truss' ? level.baseHalf * 2 : level.bays * level.bayW;
       let x0 = Math.min(level.x - bw / 2, ...ns.map((n) => n.x - n.w / 2)) - 70;
       let x1 = Math.max(level.x + bw / 2, ...ns.map((n) => n.x + n.w / 2)) + 70;
       if (level.dropZone) { x0 = Math.min(x0, level.dropZone[0] - 70); x1 = Math.max(x1, level.dropZone[1] + 70); }
-      const topY = WORLD.groundY - Math.max(level.floors * level.floorH + (level.roof ? 50 : 0),
+      const topY = WORLD.groundY - Math.max(level.structure === 'truss' ? level.height + 50 : level.floors * level.floorH + (level.roof === 'spire' ? 100 : level.roof ? 50 : 0),
         ...ns.map((n) => n.h + (n.style === 'church' ? 170 : 0)));
       let y0 = topY - 60;
       const y1 = WORLD.groundY + 18;
@@ -483,6 +483,7 @@
         const x0 = d.x - d.w / 2, y0 = WORLD.groundY - d.h;
         ctx.save();
         if (d.style === 'church') this.drawChurch(ctx, nb, x0, y0);
+        else if (d.style === 'gothic') this.drawGothicNeighbor(ctx, d, x0, y0);
         else this.drawPlainNeighbor(ctx, d, x0, y0);
         // protective netting, if bought for this job
         if (sc.netting) {
@@ -559,6 +560,31 @@
       ctx.beginPath(); ctx.roundRect(x0, y0, d.w, d.h, 4); ctx.stroke();
     }
 
+    drawGothicNeighbor(ctx, d, x0, y0) {
+      const dark = shadeHex(d.color, 0.6);
+      ctx.fillStyle = d.color; ctx.strokeStyle = dark; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.rect(x0, y0, d.w, d.h); ctx.fill(); ctx.stroke();
+      // pinnacles along the roofline
+      ctx.fillStyle = dark;
+      for (let x = x0; x <= x0 + d.w; x += d.w / 6) {
+        ctx.beginPath(); ctx.moveTo(x - 5, y0); ctx.lineTo(x, y0 - 22); ctx.lineTo(x + 5, y0); ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = '#5d6b78';
+      ctx.fillRect(x0, y0 - 4, d.w, 5);
+      // rows of pointed windows
+      const cols = Math.floor(d.w / 26), rows = Math.floor((d.h - 40) / 44);
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        const cx = x0 + (c + 0.5) * (d.w / cols), top = y0 + 18 + r * 44, ww = 9;
+        ctx.fillStyle = '#2f4a66';
+        ctx.beginPath(); ctx.moveTo(cx - ww / 2, top + 26); ctx.lineTo(cx - ww / 2, top + 6); ctx.quadraticCurveTo(cx - ww / 2, top, cx, top - 3);
+        ctx.quadraticCurveTo(cx + ww / 2, top, cx + ww / 2, top + 6); ctx.lineTo(cx + ww / 2, top + 26); ctx.closePath(); ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1;
+      for (let x = x0 + d.w / cols; x < x0 + d.w - 1; x += d.w / cols) { ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, WORLD.groundY); ctx.stroke(); }
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.arc(d.x, WORLD.groundY - 26, 12, Math.PI, 0); ctx.lineTo(d.x + 12, WORLD.groundY); ctx.lineTo(d.x - 12, WORLD.groundY); ctx.fill();
+    }
+
     drawChurch(ctx, nb, x0, y0) {
       const d = nb.def;
       const stone = d.color, dark = shadeHex(d.color, 0.55);
@@ -607,6 +633,9 @@
 
     pieceColors(material, kind) {
       if (material === 'brick') return kind === 'column' ? '#b5523b' : '#7a5236';
+      if (material === 'sandstone') return kind === 'column' ? '#d8b779' : '#b8935a';
+      if (material === 'marble') return kind === 'column' ? '#f3efe6' : '#d9d2c3';
+      if (material === 'iron') return '#6b4f3a';
       if (material === 'steel') return kind === 'column' ? '#6f8496' : '#5f7486';
       return kind === 'column' ? '#adb2bc' : '#979ca6';
     }
@@ -625,6 +654,9 @@
         ctx.rotate(b.angle);
         if (pc.kind === 'tank') { this.drawTank(ctx, pc, hoverBody === b); ctx.restore(); continue; }
         if (pc.kind === 'sign') { this.drawSign(ctx, pc, hoverBody === b); ctx.restore(); continue; }
+        if (pc.kind === 'spire') { this.drawSpire(ctx, pc, hoverBody === b); ctx.restore(); continue; }
+        if (pc.kind === 'belfry') { this.drawBelfry(ctx, pc, hoverBody === b); ctx.restore(); continue; }
+        if (pc.kind === 'beam') { this.drawBeam(ctx, pc, hoverBody === b); ctx.restore(); continue; }
         if (pc.kind === 'frag') {
           let base;
           if (pc.parentKind === 'glass') {
@@ -639,6 +671,9 @@
           if (pc.parentKind === 'wall') base = material === 'glass' ? '#9fd8f0' : facade.wall;
           else if (pc.parentKind === 'tank') base = '#7d8b99';
           else if (pc.parentKind === 'sign') base = '#ffd23f';
+          else if (pc.parentKind === 'spire') base = '#4f6d7a';
+          else if (pc.parentKind === 'belfry') base = '#f3efe6';
+          else if (pc.parentKind === 'beam') base = '#6b4f3a';
           else base = this.pieceColors(material, pc.parentKind === 'slab' ? 'slab' : 'column');
           ctx.fillStyle = shadeHex(base, pc.shade * 0.95);
           ctx.strokeStyle = '#4a4e57';
@@ -677,6 +712,76 @@
           else ctx.fillRect(-pc.w / 2 + 2, -pc.h / 2 + 2, pc.w - 4, 2);
         }
         ctx.restore();
+      }
+    }
+
+    drawSpire(ctx, pc, hover) {
+      const w = pc.w, h = pc.h;
+      // pointed slate roof with gilded finial
+      ctx.fillStyle = '#4f6d7a';
+      ctx.strokeStyle = hover ? '#ff3b30' : '#2b3d45';
+      ctx.lineWidth = hover ? 2.5 : 2;
+      ctx.beginPath(); ctx.moveTo(-w / 2, h / 2); ctx.lineTo(0, -h / 2 + 8); ctx.lineTo(w / 2, h / 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
+      for (let i = 1; i < 6; i++) { const y = h / 2 - i * (h - 8) / 6; const hw = (w / 2) * (1 - i / 6); ctx.beginPath(); ctx.moveTo(-hw, y); ctx.lineTo(hw, y); ctx.stroke(); }
+      ctx.fillStyle = '#e9c46a';
+      ctx.fillRect(-1.5, -h / 2, 3, 10);
+      ctx.beginPath(); ctx.arc(0, -h / 2 + 1, 3, 0, Math.PI * 2); ctx.fill();
+      // little dormer clock-room windows
+      ctx.fillStyle = '#ffd23f';
+      ctx.fillRect(-w * 0.18, h / 2 - 22, 6, 9); ctx.fillRect(w * 0.18 - 6, h / 2 - 22, 6, 9);
+    }
+
+    drawBelfry(ctx, pc, hover) {
+      const w = pc.w, h = pc.h;
+      ctx.fillStyle = '#f3efe6';
+      ctx.strokeStyle = hover ? '#ff3b30' : '#9a8f7a';
+      ctx.lineWidth = hover ? 2.5 : 1.5;
+      ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2 + 6, w, h - 6, 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#d9d2c3';
+      ctx.fillRect(-w / 2 - 3, -h / 2 + 2, w + 6, 6);
+      // arched bell openings
+      ctx.fillStyle = '#5a5248';
+      for (let i = 0; i < 3; i++) {
+        const x = -w / 2 + (i + 0.5) * (w / 3);
+        ctx.beginPath(); ctx.arc(x, -2, 5, Math.PI, 0); ctx.lineTo(x + 5, h / 2 - 4); ctx.lineTo(x - 5, h / 2 - 4); ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = '#d4a017';
+      ctx.beginPath(); ctx.arc(0, 2, 3, Math.PI, 0); ctx.fill();
+    }
+
+    // Wrought-iron lattice girder (a rectangle along its local x axis)
+    drawBeam(ctx, pc, hover) {
+      const l = pc.w, t = pc.h;
+      const col = '#6b4f3a', dark = '#3e2c20';
+      if (pc.arch) {
+        // decorative arch hanging below the first platform
+        ctx.strokeStyle = col; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(0, t / 2, l / 2 - 6, 26, 0, 0, Math.PI); ctx.stroke();
+      }
+      if (pc.mast) {
+        ctx.fillStyle = dark; ctx.fillRect(-l / 2, -1.5, l, 3);
+        ctx.fillStyle = '#e63946'; ctx.fillRect(l / 2 - 10, -8, 10, 6);
+        return;
+      }
+      ctx.strokeStyle = hover ? '#ff3b30' : dark;
+      ctx.lineWidth = hover ? 2.2 : 1.4;
+      ctx.fillStyle = 'rgba(107,79,58,0.25)';
+      ctx.fillRect(-l / 2, -t / 2, l, t);
+      ctx.beginPath(); ctx.moveTo(-l / 2, -t / 2); ctx.lineTo(l / 2, -t / 2); ctx.moveTo(-l / 2, t / 2); ctx.lineTo(l / 2, t / 2); ctx.stroke();
+      ctx.strokeStyle = hover ? '#ff3b30' : col; ctx.lineWidth = 1;
+      ctx.beginPath();
+      const step = Math.max(5, t * 1.2);
+      for (let x = -l / 2, up = true; x < l / 2 - 0.1; x += step, up = !up) {
+        ctx.moveTo(x, up ? -t / 2 : t / 2); ctx.lineTo(Math.min(l / 2, x + step), up ? t / 2 : -t / 2);
+      }
+      ctx.stroke();
+      if (pc.deck) {
+        // platform railing
+        ctx.strokeStyle = dark; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(-l / 2, -t / 2 - 6); ctx.lineTo(l / 2, -t / 2 - 6);
+        for (let x = -l / 2; x <= l / 2; x += 6) { ctx.moveTo(x, -t / 2); ctx.lineTo(x, -t / 2 - 6); }
+        ctx.stroke();
       }
     }
 
@@ -736,6 +841,7 @@
         ctx.restore();
         return;
       }
+      if (material === 'sandstone' || material === 'marble') { this.drawLandmarkWall(ctx, pc, material); ctx.restore(); return; }
       const wallColor = material === 'brick' ? '#c8643f' : material === 'steel' ? '#a9b8a0' : facade.wall;
       const trim = material === 'brick' ? '#8f3f28' : material === 'steel' ? '#7d8d74' : facade.trim;
       ctx.fillStyle = shadeHex(wallColor, pc.shade);
@@ -776,6 +882,59 @@
         }
       }
       ctx.restore();
+    }
+
+    drawLandmarkWall(ctx, pc, material) {
+      const w = pc.w, h = pc.h;
+      if (material === 'marble') {
+        ctx.fillStyle = shadeHex('#f6f2ea', pc.shade);
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+        // open arcade: dark arches separated by slim columns
+        const n = 2, gw = w / n;
+        for (let i = 0; i < n; i++) {
+          const cx = -w / 2 + (i + 0.5) * gw, aw = gw * 0.62;
+          ctx.fillStyle = '#6d6458';
+          ctx.beginPath(); ctx.arc(cx, -h / 2 + 4 + aw / 2, aw / 2, Math.PI, 0); ctx.lineTo(cx + aw / 2, h / 2 - 3); ctx.lineTo(cx - aw / 2, h / 2 - 3); ctx.closePath(); ctx.fill();
+        }
+        ctx.fillStyle = '#d9d2c3';
+        ctx.fillRect(-w / 2, h / 2 - 3, w, 3);
+        ctx.fillRect(-w / 2, -h / 2, w, 2);
+        return;
+      }
+      // sandstone gothic panel
+      ctx.fillStyle = shadeHex('#e3c58e', pc.shade);
+      ctx.fillRect(-w / 2, -h / 2, w, h);
+      ctx.strokeStyle = 'rgba(120,85,40,0.35)'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = -w / 2 + 6; x < w / 2; x += 6) { ctx.moveTo(x, -h / 2); ctx.lineTo(x, h / 2); }
+      ctx.stroke();
+      if (pc.clock) {
+        const r = Math.min(w, h) * 0.42;
+        ctx.fillStyle = '#e9c46a'; ctx.beginPath(); ctx.arc(0, 0, r + 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fffaf0'; ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#3a2a1a';
+        for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6; ctx.fillRect(Math.cos(a) * r * 0.8 - 1, Math.sin(a) * r * 0.8 - 1, 2, 2); }
+        // hands run on real time, just for fun
+        const now = new Date();
+        const hr = ((now.getHours() % 12) + now.getMinutes() / 60) * Math.PI / 6 - Math.PI / 2;
+        const mn = now.getMinutes() * Math.PI / 30 - Math.PI / 2;
+        ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(hr) * r * 0.5, Math.sin(hr) * r * 0.5); ctx.stroke();
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(mn) * r * 0.78, Math.sin(mn) * r * 0.78); ctx.stroke();
+        return;
+      }
+      // tall pointed (gothic) windows
+      const n = w > 44 ? 2 : 1, gw = (w - 8) / n;
+      for (let i = 0; i < n; i++) {
+        const cx = -w / 2 + 4 + (i + 0.5) * gw, ww = gw * 0.5, top = -h / 2 + 6, bot = h / 2 - 5;
+        ctx.fillStyle = '#2f4a66';
+        ctx.beginPath(); ctx.moveTo(cx - ww / 2, bot); ctx.lineTo(cx - ww / 2, top + ww); ctx.quadraticCurveTo(cx - ww / 2, top, cx, top - 2);
+        ctx.quadraticCurveTo(cx + ww / 2, top, cx + ww / 2, top + ww); ctx.lineTo(cx + ww / 2, bot); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#b08a4e'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(cx, top); ctx.lineTo(cx, bot); ctx.stroke();
+      }
     }
 
     drawCars(ctx, sc) {

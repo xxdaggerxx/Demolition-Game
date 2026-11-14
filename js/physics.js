@@ -30,6 +30,22 @@
       density: { column: 0.0024, slab: 0.0026 },
       blast: { pieces: [1, 2], scale: [0.92, 0.05] }, crush: { pieces: [1, 2], scale: [0.92, 0.05] },
     },
+    // Landmark looks: physics shared with brick / steel, but drawn differently.
+    sandstone: {
+      name: 'Sandstone', colTough: 2, slabTough: 3, breakDist: 3.8, stiffness: 0.95,
+      density: { column: 0.0032, slab: 0.0024 },
+      blast: { pieces: [2, 5], scale: [0.6, 0.3] }, crush: { pieces: [2, 3], scale: [0.55, 0.25] },
+    },
+    marble: {
+      name: 'Marble', colTough: 2, slabTough: 3, breakDist: 3.8, stiffness: 0.95,
+      density: { column: 0.0034, slab: 0.0026 },
+      blast: { pieces: [2, 4], scale: [0.6, 0.3] }, crush: { pieces: [2, 3], scale: [0.55, 0.25] },
+    },
+    iron: {
+      name: 'Wrought iron', colTough: 6, slabTough: 6, breakDist: 6, stiffness: 0.9,
+      density: { column: 0.0026, slab: 0.0026 },
+      blast: { pieces: [1, 2], scale: [0.92, 0.05] }, crush: { pieces: [1, 2], scale: [0.92, 0.05] },
+    },
     glass: {
       name: 'Glass', colTough: 3, slabTough: 4, breakDist: 4.5, stiffness: 0.95, glassWalls: true,
       density: { column: 0.0030, slab: 0.0032 },
@@ -43,6 +59,9 @@
     wall: { density: 0.0012, friction: 0.8, frictionStatic: 1.0, restitution: 0.03, toughness: 1, breakDist: 3.5 },
     frag: { density: 0.0025, friction: 0.9, frictionStatic: 1.0, restitution: 0.05 },
     tank: { density: 0.0040, friction: 0.8, frictionStatic: 1.0, restitution: 0.02, toughness: 3 },
+    spire: { density: 0.0008, friction: 0.8, frictionStatic: 1.0, restitution: 0.02, toughness: 3 },
+    belfry: { density: 0.0030, friction: 0.8, frictionStatic: 1.0, restitution: 0.02, toughness: 3 },
+    beam: { density: 0.0026, friction: 0.8, frictionStatic: 1.0, restitution: 0.03, toughness: 6 },
     sign: { density: 0.0016, friction: 0.8, frictionStatic: 1.0, restitution: 0.02, toughness: 3 },
   };
 
@@ -166,6 +185,7 @@
   }
 
   function buildTarget(sim) {
+    if (sim.level.structure === 'truss') return buildTruss(sim);
     const L = sim.level;
     const mat = sim.mat;
     const B = L.bays, F = L.floors, bw = L.bayW, fh = L.floorH;
@@ -254,10 +274,106 @@
     };
     if (L.roof === 'tank') addRoof('tank', 40, 46, left + bw);
     if (L.roof === 'sign') addRoof('sign', Math.min(B * bw - 20, 110), 40, L.x);
+    if (L.roof === 'spire') addRoof('spire', B * bw + COL_W - 6, 96, L.x);
+    if (L.roof === 'belfry') addRoof('belfry', B * bw - 14, 40, L.x);
+    // clock faces near the top of a clock tower
+    if (L.clockFloor != null) for (const w of walls[L.clockFloor]) w.plugin.piece.clock = true;
+    if (L.lean) applyLean(sim, L.lean);
 
     sim.cols = cols; sim.slabs = slabs; sim.walls = walls;
     sim.totalMass = sim.pieces.reduce((s, b) => s + b.mass, 0);
     sim.comX0 = sim.pieces.reduce((s, b) => s + b.mass * b.position.x, 0) / sim.totalMass;
+  }
+
+  // Tilt the whole (already welded) structure about the bottom corner it leans
+  // toward, like the famous tower. Constraint offsets on bodies rotate with them;
+  // the foundation anchors are world points and are rotated here.
+  function applyLean(sim, angle) {
+    const b = sim.building;
+    const pivot = { x: angle > 0 ? b.right + COL_W / 2 : b.left - COL_W / 2, y: WORLD.groundY };
+    const rot = (p) => Vector.add(pivot, Vector.rotate(Vector.sub(p, pivot), angle));
+    for (const body of sim.pieces) {
+      Body.setPosition(body, rot(body.position));
+      Body.setAngle(body, body.angle + angle);
+      body.plugin.piece.y0 = body.position.y;
+    }
+    for (const j of sim.joints) if (!j.c.bodyB) j.c.pointB = rot(j.c.pointB);
+    const xs = sim.pieces.map((p) => p.position.x);
+    sim.building.leanLeft = Math.min(...xs);
+    sim.building.leanRight = Math.max(...xs);
+  }
+
+  // ---------- Lattice (truss) structures, e.g. an iron tower ----------
+  // Members are rigid bars joined at nodes. Intact members share a negative
+  // collision group so the overlapping ends at each node don't fight; once a
+  // member has torn completely free it rejoins normal collisions as rubble.
+  const TRUSS_GROUP = -7;
+  function buildTruss(sim) {
+    const L = sim.level;
+    const gy = WORLD.groundY;
+    const H = L.height, base = L.baseHalf, cx = L.x;
+    const hw = (h) => L.topHalf + (base - L.topHalf) * Math.pow(1 - h / H, 2.1);
+    const levels = L.trussLevels;
+    const lefts = levels.map((h) => ({ x: cx - hw(h), y: gy - h }));
+    const rights = levels.map((h) => ({ x: cx + hw(h), y: gy - h }));
+    const apex = { x: cx, y: gy - H };
+    const nodeOwner = new Map(); // node key -> primary member
+    const key = (p) => `${Math.round(p.x)}:${Math.round(p.y)}`;
+    let idx = 0;
+    const T = 7;
+    const member = (a, b, extra) => {
+      const len = Vector.magnitude(Vector.sub(b, a));
+      const mid = Vector.mult(Vector.add(a, b), 0.5);
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      const thick = (extra && extra.thick) || T;
+      const over = (extra && extra.over) || 0;
+      const body = makePiece(sim, 'beam', mid.x, mid.y, len + over * 2, thick, Object.assign({ truss: true, idx: idx++, floor: 0 }, extra || {}),
+        { density: sim.mat.density.column, toughness: sim.mat.colTough });
+      Body.setAngle(body, ang);
+      body.collisionFilter.group = TRUSS_GROUP;
+      body.plugin.piece.y0 = body.position.y;
+      // rigid connection at each end: two pins along the member's axis
+      const u = { x: Math.cos(ang), y: Math.sin(ang) };
+      for (const [p, dir] of [[a, 1], [b, -1]]) {
+        const k = key(p);
+        const pts = [p, Vector.add(p, Vector.mult(u, 4 * dir))];
+        if (p.y >= gy - 0.5) weld(sim, body, null, pts, sim.mat.breakDist, sim.mat.stiffness);
+        else if (nodeOwner.has(k)) weld(sim, body, nodeOwner.get(k), pts, sim.mat.breakDist, sim.mat.stiffness);
+        else nodeOwner.set(k, body);
+      }
+      return body;
+    };
+    const n = levels.length;
+    for (let k = 0; k < n - 1; k++) {
+      member(lefts[k], lefts[k + 1], { leg: true, floor: k });
+      member(rights[k], rights[k + 1], { leg: true, floor: k });
+    }
+    member(lefts[n - 1], apex, { leg: true, floor: n - 1 });
+    member(rights[n - 1], apex, { leg: true, floor: n - 1 });
+    for (let k = 1; k < n; k++) {
+      const deck = L.decks.includes(k);
+      member(lefts[k], rights[k], { floor: k, deck, arch: k === 1, thick: deck ? 9 : 6, over: deck ? 14 : 0 });
+    }
+    for (let k = 1; k < n - 1; k++) {
+      if (k % 2) member(lefts[k], rights[k + 1], { floor: k, diag: true, thick: 5 });
+      else member(rights[k], lefts[k + 1], { floor: k, diag: true, thick: 5 });
+    }
+    // flagpole on top
+    member(apex, { x: cx, y: gy - H - 46 }, { floor: n, thick: 4, mast: true });
+    sim.building = { left: cx - base, right: cx + base, height: H, top: gy - H };
+    sim.cols = []; sim.slabs = []; sim.walls = [];
+    sim.truss = true;
+    sim.totalMass = sim.pieces.reduce((s, b) => s + b.mass, 0);
+    sim.comX0 = sim.pieces.reduce((s, b) => s + b.mass * b.position.x, 0) / sim.totalMass;
+  }
+
+  function releaseFreeTrussMembers(sim) {
+    if (!sim.truss) return;
+    const held = new Set();
+    for (const j of sim.joints) { held.add(j.c.bodyA); if (j.c.bodyB) held.add(j.c.bodyB); }
+    for (const b of sim.pieces) {
+      if (b.collisionFilter.group === TRUSS_GROUP && !held.has(b)) b.collisionFilter.group = 0;
+    }
   }
 
   function buildNeighbors(sim) {
@@ -314,7 +430,7 @@
   function pieceAt(sim, p) {
     const found = Query.point(sim.pieces.filter((b) => b.plugin.piece.kind !== 'frag'), p);
     if (!found.length) return null;
-    const order = { column: 0, slab: 1, tank: 2, sign: 2, wall: 3 };
+    const order = { column: 0, beam: 0, slab: 1, tank: 2, sign: 2, spire: 2, belfry: 2, wall: 3 };
     found.sort((a, b) => order[a.plugin.piece.kind] - order[b.plugin.piece.kind]);
     return found[0];
   }
@@ -372,7 +488,7 @@
     removePiece(sim, body);
     if (mode === 'cut') return cutMember(sim, body);
     let spec = mode === 'crush' ? sim.mat.crush : sim.mat.blast;
-    if (pc.kind === 'tank' || pc.kind === 'sign') spec = { pieces: [1, 2], scale: [0.95, 0.03] };
+    if (pc.kind === 'tank' || pc.kind === 'sign' || pc.kind === 'spire' || pc.kind === 'belfry') spec = { pieces: [1, 2], scale: [0.95, 0.03] };
     const [short, long] = spec.pieces;
     const nx = pc.w > pc.h ? long : short;
     const ny = pc.w > pc.h ? 1 : long;
@@ -448,6 +564,7 @@
         if (dist > 24 || dist < 0.001) continue;
         Body.setVelocity(b, Vector.add(b.velocity, Vector.mult(Vector.div(d, dist), 0.5 * (1 - dist / 24))));
       }
+      releaseFreeTrussMembers(sim);
       pushFx(sim, { type: 'cut', x: p.x, y: p.y, angle: host.angle, vertical: host.plugin.piece.h > host.plugin.piece.w });
       return;
     }
@@ -493,6 +610,7 @@
       const pc = b.plugin.piece;
       if (pc.kind === 'wall' && pc.glass && Vector.magnitude(Vector.sub(b.position, p)) < R * 1.3) shatterGlass(sim, b);
     }
+    releaseFreeTrussMembers(sim);
     pushFx(sim, { type: 'explosion', x: p.x, y: p.y, strength: s, radius: R, shaped: !!aim, aim });
   }
 
@@ -617,7 +735,7 @@
       const dv = Math.sqrt(dvx * dvx + dvy * dvy);
       if (dv < 2.6) continue;
       if (pc.kind === 'wall' && pc.glass) { shatterGlass(sim, b); continue; }
-      if (dv > 3.5 && pc.kind !== 'frag' && sim.rand() < 0.15) {
+      if (dv > 3.5 && pc.kind !== 'frag' && sim.rand() < (pc.truss ? 0.4 : 0.15)) {
         for (const j of sim.joints) if (j.c.bodyA === b || j.c.bodyB === b) { breakJoint(sim, j); jointsChanged = true; }
       }
     }
@@ -651,7 +769,7 @@
         }
       }
     }
-    if (jointsChanged) sim.joints = sim.joints.filter((j) => !j.broken);
+    if (jointsChanged) { sim.joints = sim.joints.filter((j) => !j.broken); releaseFreeTrussMembers(sim); }
   }
 
   function checkJoints(sim) {
@@ -664,7 +782,7 @@
         changed = true;
       }
     }
-    if (changed) sim.joints = sim.joints.filter((j) => !j.broken);
+    if (changed) { sim.joints = sim.joints.filter((j) => !j.broken); releaseFreeTrussMembers(sim); }
   }
 
   function cullLost(sim) {
@@ -729,6 +847,7 @@
     const fallen = (b) => b && b.plugin.piece && b.position.y - b.plugin.piece.y0 > fh * 0.5;
     for (const j of sim.joints) if (fallen(j.c.bodyA) && (!j.c.bodyB || fallen(j.c.bodyB))) breakJoint(sim, j);
     sim.joints = sim.joints.filter((j) => !j.broken);
+    releaseFreeTrussMembers(sim);
   }
 
   function kineticLevel(sim) {
@@ -822,6 +941,7 @@
   }
 
   function loadMap(sim) {
+    if (sim.truss) return new Map();
     const L = sim.level, B = L.bays, F = L.floors, bw = L.bayW;
     const share = (i) => ((i === 0 || i === B) ? 0.5 : 1) * bw;
     // weight per unit width of one floor (slabs + cladding) and per column

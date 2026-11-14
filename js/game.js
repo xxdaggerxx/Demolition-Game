@@ -86,7 +86,7 @@
       b.disabled = locked;
       const stars = best ? '★'.repeat(best.stars) + '☆'.repeat(3 - best.stars) : '☆☆☆';
       const mat = P.MATERIALS[L.material || 'concrete'].name;
-      b.innerHTML = `<span class="n">Job ${L.id}${locked ? ' 🔒' : ''} · ${mat}${L.topple ? ' · ↔ Directional' : ''}</span><span class="t">${L.name}</span>
+      b.innerHTML = `<span class="n">Job ${L.id}${locked ? ' 🔒' : ''} · ${mat}${L.topple ? ' · ↔' : ''}${L.landmark ? ' · ' + L.landmark : ''}</span><span class="t">${L.name}</span>
         <span class="s">${stars}</span><br><span class="b">${best ? 'Best: ' + best.score + ' · ' : ''}Budget ${money(L.budget)}</span>`;
       b.onclick = () => { audio.click(); startLevel(i); };
       grid.appendChild(b);
@@ -166,7 +166,7 @@
     }
     if (state.chargeType !== 'standard' && !owns(state.chargeType)) state.chargeType = 'standard';
     $('btnNetting').classList.toggle('hidden', !owns('netting'));
-    $('btnXray').classList.toggle('hidden', !owns('xray'));
+    $('btnXray').classList.toggle('hidden', !owns('xray') || !!(state.sim && state.sim.truss));
     $('btnXray').classList.toggle('on', state.xray);
     $('btnMegaphone').classList.toggle('hidden', !owns('megaphone'));
     if (state.sim) $('btnNetting').classList.toggle('on', state.sim.netting);
@@ -184,7 +184,7 @@
   // Members are identified by kind + floor + column line / bay, so the layout can be
   // re-planted on a freshly built copy of the same building.
   function memberKey(pc) {
-    return `${pc.kind}:${pc.floor}:${pc.kind === 'column' ? pc.line : pc.kind === 'slab' ? pc.bay : 0}`;
+    return `${pc.kind}:${pc.floor}:${pc.kind === 'column' ? pc.line : pc.kind === 'slab' ? pc.bay : pc.kind === 'beam' ? pc.idx : 0}`;
   }
 
   function snapshotSetup(sim) {
@@ -389,6 +389,13 @@
     if (L.material === 'glass' && ev.success) out.push('Glass rain! Shards sparkle across the street');
     if (L.material === 'steel' && ev.success) out.push(sim.charges.some((c) => c.type === 'cutter') ? 'Precision cutters slice steel frame like butter' : 'Steel giant buckles under heavy charges');
     if (L.roof === 'tank' && ev.success) out.push('Rooftop water tank takes its final plunge');
+    if (L.landmark) {
+      out.push(ev.success
+        ? pick([`Theme park says farewell to its ${n} replica`, `Tourists snap final selfies as ${n} replica falls`, `Souvenir shop sells out of mini ${n}s`])
+        : pick([`${n} replica proves tougher than the original`, `Theme park closure delayed — ${n} still standing`]));
+    }
+    if (L.lean && ev.success) out.push('After centuries of leaning (well, a few years), the tower finally lies down');
+    if (L.clockFloor != null && ev.success) out.push('Clock stops for good — witnesses confirm the exact time');
     if (ev.success && ev.underBudget >= 0.4) out.push(`Demolition firm finishes ${money(ev.budget - ev.spent)} under budget`);
     if (ev.success && timeBonus >= 75) out.push(`Speedy crew blows ${n} in record time`);
     if (ev.penalty === 0 && ev.success) out.push('Safety inspector: “Zero incidents. Remarkable.”');
@@ -541,11 +548,11 @@
     // snap the charge to the member's centre line
     const local = Matter.Vector.rotate(Matter.Vector.sub(p, body.position), -body.angle);
     if (pc.kind === 'column') { local.x = 0; local.y = Math.max(-pc.h / 2 + 7, Math.min(pc.h / 2 - 7, local.y)); }
-    else if (pc.kind === 'slab') { local.y = 0; local.x = Math.max(-pc.w / 2 + 6, Math.min(pc.w / 2 - 6, local.x)); }
+    else if (pc.kind === 'slab' || pc.kind === 'beam') { local.y = 0; local.x = Math.max(-pc.w / 2 + 6, Math.min(pc.w / 2 - 6, local.x)); }
     else { local.x = Math.max(-pc.w / 2 + 6, Math.min(pc.w / 2 - 6, local.x)); local.y = Math.max(-pc.h / 2 + 6, Math.min(pc.h / 2 - 6, local.y)); }
     const point = Matter.Vector.add(body.position, Matter.Vector.rotate(local, body.angle));
     let weak = null;
-    const label = { column: 'column', slab: 'slab', tank: 'water tank', sign: 'billboard' }[pc.kind];
+    const label = { column: 'column', slab: 'slab', tank: 'water tank', sign: 'billboard', spire: 'spire', belfry: 'belfry', beam: 'iron girder' }[pc.kind];
     if (state.chargeType !== 'cutter' && state.strength < pc.toughness) weak = `Needs strength ${pc.toughness}+ to cut this ${label}`;
     const cost = P.chargeCost(state.chargeType, state.strength);
     return { body, point, weak, cost: `${money(cost)} · ${money(budgetLeft())} left` };
@@ -852,7 +859,7 @@
     const scene = state.phase === 'replay'
       ? P.frameScene(sim, state.rec, frameIndexAt(state.rec, state.replay.t))
       : P.liveScene(sim);
-    const xrayOn = state.xray && state.phase === 'plan' && owns('xray');
+    const xrayOn = state.xray && state.phase === 'plan' && owns('xray') && !sim.truss;
     $('xrayLegend').classList.toggle('hidden', !xrayOn);
     renderer.draw({
       xray: xrayOn ? P.loadMap(sim) : null,

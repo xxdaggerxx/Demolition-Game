@@ -68,6 +68,22 @@ imploding it. Cut the columns on the drop-zone side (a wedge over the first floo
 and leave the far side standing as a hinge. A straight-down implosion, or a fall the wrong
 way, fails the job.
 
+### World Landmarks
+
+A theme park full of landmark replicas is closing down, and you've got the contract:
+
+- **🕰 Clock Tower:** a tall, narrow sandstone tower with a clock face (the hands show the
+  real time) and a pointed spire. Implode it between two gothic buildings.
+- **🏛 Leaning Tower:** a white marble arcade tower that already leans about 5°. Finish
+  the job by toppling it the way it leans, into the piazza.
+- **🗼 Iron Lattice Tower:** a wrought-iron truss of angled girders with two platforms
+  and an arch. Cut the legs on one side so it pivots and falls across the park.
+
+The lattice tower uses a separate *truss* builder. Each girder is a rigid bar welded to the
+others at shared nodes, and a girder only collides with other members once it has torn
+completely free. The leaning tower is a normal frame tilted about its base before the game
+starts.
+
 ### News ticker
 
 The results screen opens with a scrolling **BREAKING NEWS** ticker. Its headlines are
@@ -120,7 +136,7 @@ audio files.
 ```
 index.html        UI shell (HUD, toolbar, menus)
 css/style.css     styling
-js/levels.js      the eight demolition jobs
+js/levels.js      the eleven demolition jobs, including the landmarks
 js/physics.js     building materials, explosives, collapse, cars, bystanders, replay
                   recording and scoring (also runs in Node)
 js/render.js      canvas renderer, particles, dust and camera shake

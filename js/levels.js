@@ -110,6 +110,53 @@
       people: { every: 6, max: 3 },
       budget: 2400, maxCharges: 10, planTime: 110,
     },
+    // ---------- World Landmarks: replicas in a theme park that is closing down ----------
+    {
+      id: 9,
+      name: 'Clock Tower',
+      landmark: '🕰',
+      blurb: 'LANDMARK: the theme park’s replica clock tower. Tall, narrow sandstone with a heavy spire — bring it straight down.',
+      material: 'sandstone', bays: 1, floors: 9, bayW: 78, floorH: 56, x: 800, lotPad: 58, roof: 'spire', clockFloor: 7,
+      neighbors: [
+        { x: 515, w: 210, h: 250, color: '#d9b77e', style: 'gothic' },
+        { x: 1100, w: 180, h: 220, color: '#c9a36b', style: 'gothic' },
+      ],
+      cars: [655],
+      people: { every: 6, max: 4 },
+      budget: 2400, maxCharges: 10, planTime: 110,
+    },
+    {
+      id: 10,
+      name: 'Leaning Tower',
+      landmark: '🏛',
+      blurb: 'LANDMARK: the replica leaning tower — it is already tilting RIGHT. Finish the job and topple it into the piazza.',
+      material: 'marble', bays: 2, floors: 8, bayW: 40, floorH: 50, x: 520, lotPad: 22, roof: 'belfry', lean: 0.08,
+      topple: 'right', dropZone: [600, 1060],
+      neighbors: [
+        { x: 370, w: 150, h: 220, color: '#e9c46a', style: 'office' },
+        { x: 1150, w: 150, h: 260, color: '#f4a261', style: 'brick' },
+      ],
+      cars: [],
+      people: { every: 6, max: 4 },
+      budget: 2200, maxCharges: 10, planTime: 110,
+    },
+    {
+      id: 11,
+      name: 'Iron Lattice Tower',
+      landmark: '🗼',
+      blurb: 'LANDMARK: the park’s replica of the famous iron tower. A wrought-iron lattice — cut the legs on one side and fell it RIGHT across the park.',
+      structure: 'truss', material: 'iron', x: 420, height: 500, baseHalf: 118, topHalf: 9,
+      trussLevels: [0, 105, 175, 235, 290, 345, 395, 440, 475], decks: [1, 3],
+      floors: 9, floorH: 56, lotPad: 20,
+      topple: 'right', dropZone: [560, 1150],
+      neighbors: [
+        { x: 190, w: 130, h: 180, color: '#8ecae6', style: 'office' },
+        { x: 1240, w: 140, h: 240, color: '#ffb703', style: 'brick' },
+      ],
+      cars: [],
+      people: { every: 6, max: 4 },
+      budget: 3600, maxCharges: 10, planTime: 120,
+    },
   ];
   root.LEVELS = LEVELS;
   if (typeof module !== 'undefined') module.exports = LEVELS;
