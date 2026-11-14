@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>IMPLODE! — Controlled Demolition</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- Top HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-box" id="hudLevel"><span class="lbl">Level</span><b id="levelName">—</b></div>
+    <div class="hud-box timer-box"><span class="lbl" id="timerLabel">Planning time</span><b id="timer">1:30</b></div>
+    <div class="hud-box"><span class="lbl">Charges</span><b id="chargeCount">0 / 0</b></div>
+  </div>
+
+  <div id="corner">
+    <button id="btnMusic" class="icon" title="Music (M)">♫</button>
+    <button id="btnSfx" class="icon" title="Sound effects (S)">🔊</button>
+    <button id="btnMenu" class="icon hidden" title="Levels (Esc)">☰</button>
+  </div>
+
+  <!-- Bottom toolbar -->
+  <div id="toolbar" class="hidden">
+    <div class="group strength">
+      <div class="row"><span class="lbl">Charge strength</span><b id="strengthVal">3</b><span id="strengthKg" class="kg"></span></div>
+      <input type="range" id="strength" min="1" max="10" step="1" value="3" />
+      <div id="strengthHint" class="hint"></div>
+    </div>
+    <div class="group">
+      <div class="row"><span class="lbl">Fuse delay</span></div>
+      <div class="seg" id="delays">
+        <button data-d="0" class="on">0s</button>
+        <button data-d="0.25">0.25</button>
+        <button data-d="0.5">0.5</button>
+        <button data-d="1">1s</button>
+        <button data-d="1.5">1.5</button>
+        <button data-d="2">2s</button>
+      </div>
+      <div class="hint">Stagger charges to steer the fall</div>
+    </div>
+    <div class="group actions">
+      <button id="btnClear" class="btn">Clear</button>
+      <button id="btnDetonate" class="btn red big">💥 DETONATE</button>
+    </div>
+  </div>
+
+  <div id="countdown" class="hidden"></div>
+  <div id="toast" class="hidden"></div>
+
+  <!-- Screens -->
+  <div id="overlay">
+    <div class="card" id="screenTitle">
+      <h1>IMPLODE!</h1>
+      <h2>Controlled Demolition</h2>
+      <p>Plant explosives on the building, set their strength and fuse delays, then bring it down
+        <b>on its own footprint</b>. Debris that hits the neighbouring buildings costs you points.</p>
+      <ul class="howto">
+        <li><b>Click</b> a column or floor slab to plant a charge. Click a charge to remove it.</li>
+        <li><b>Strength</b> 1–10: columns need ≥3 to cut, slabs ≥4. Stronger = bigger blast, more flying debris.</li>
+        <li><b>Fuse delay</b> lets you sequence the blasts — cut the middle first so it falls inward.</li>
+        <li>Detonate before the <b>planning timer</b> runs out!</li>
+      </ul>
+      <button class="btn red big" id="btnPlay">PLAY</button>
+      <p class="keys">Keys: 1–0 strength · Space detonate · R retry · Esc levels · M music</p>
+    </div>
+    <div class="card hidden" id="screenLevels">
+      <h2>Choose a job</h2>
+      <div id="levelGrid"></div>
+      <button class="btn" id="btnBackTitle">Back</button>
+    </div>
+    <div class="card hidden" id="screenResult">
+      <h2 id="resTitle">Demolished!</h2>
+      <div id="resStars" class="stars"></div>
+      <table id="resTable"></table>
+      <div id="resTotal" class="total"></div>
+      <div id="resBest" class="best"></div>
+      <div class="btns">
+        <button class="btn" id="btnLevels">Levels</button>
+        <button class="btn" id="btnRetry">Retry</button>
+        <button class="btn red" id="btnNext">Next job ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="lib/matter.min.js"></script>
+  <script src="js/levels.js"></script>
+  <script src="js/physics.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
