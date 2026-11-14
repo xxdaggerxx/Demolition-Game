@@ -277,6 +277,74 @@
       this.noiseHit(t, duration, 0.08, 'highpass', 4000, this.sfxGain, 0.5);
     }
 
+    carAlarm() {
+      if (!this.ready()) return;
+      const t = this.ctx.currentTime;
+      if (t - (this.lastAlarm || 0) < 1.5) return;
+      this.lastAlarm = t;
+      for (let i = 0; i < 8; i++) this.osc('square', i % 2 ? 980 : 760, t + i * 0.16, 0.15, 0.07, this.sfxGain);
+      this.noiseHit(t, 0.25, 0.4, 'bandpass', 900, this.sfxGain, 1.5);
+    }
+
+    glass() {
+      if (!this.ready()) return;
+      const t = this.ctx.currentTime;
+      if (t - (this.lastGlass || 0) < 0.07) return;
+      this.lastGlass = t;
+      for (let i = 0; i < 5; i++) this.osc('sine', 2500 + Math.random() * 4000, t + Math.random() * 0.15, 0.2, 0.04, this.sfxGain, 0.001);
+      this.noiseHit(t, 0.18, 0.18, 'highpass', 5000, this.sfxGain, 0.8);
+    }
+
+    cut() {
+      if (!this.ready()) return;
+      const t = this.ctx.currentTime;
+      this.noiseHit(t, 0.5, 0.5, 'bandpass', 3200, this.sfxGain, 2);
+      this.noiseHit(t, 0.3, 0.6, 'lowpass', 300, this.sfxGain, 0.7, this.brown);
+      this.osc('sawtooth', 90, t, 0.25, 0.2, this.sfxGain);
+    }
+
+    shoo() {
+      if (!this.ready()) return;
+      const t = this.ctx.currentTime;
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(900, t);
+      o.frequency.exponentialRampToValueAtTime(2200, t + 0.12);
+      o.frequency.exponentialRampToValueAtTime(1500, t + 0.25);
+      g.gain.setValueAtTime(0.12, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      o.connect(g).connect(this.sfxGain);
+      o.start(t); o.stop(t + 0.35);
+    }
+
+    scream() {
+      if (!this.ready()) return;
+      const t = this.ctx.currentTime;
+      if (t - (this.lastScream || 0) < 0.4) return;
+      this.lastScream = t;
+      const o = this.ctx.createOscillator();
+      const f = this.ctx.createBiquadFilter();
+      const g = this.ctx.createGain();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(520, t);
+      o.frequency.linearRampToValueAtTime(700, t + 0.15);
+      o.frequency.exponentialRampToValueAtTime(260, t + 0.8);
+      f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 3;
+      g.gain.setValueAtTime(0.18, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
+      o.connect(f).connect(g).connect(this.sfxGain);
+      o.start(t); o.stop(t + 0.9);
+    }
+
+    cash() {
+      if (!this.ready()) return;
+      const t = this.ctx.currentTime;
+      this.osc('square', NOTE(88), t, 0.08, 0.08, this.sfxGain);
+      this.osc('square', NOTE(93), t + 0.08, 0.25, 0.08, this.sfxGain);
+      this.noiseHit(t + 0.02, 0.12, 0.2, 'highpass', 6000, this.sfxGain, 0.6);
+    }
+
     jingle(win) {
       if (!this.ready()) return;
       const t = this.ctx.currentTime;

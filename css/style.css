@@ -100,9 +100,61 @@ button { font-family: inherit; cursor: pointer; }
   .hud-box b { font-size: 15px; }
   .timer-box b { font-size: 17px; }
   .icon { width: 34px; height: 34px; font-size: 14px; }
+  .seg button { padding: 4px 6px; font-size: 12px; }
+  .btn.small { font-size: 12px; padding: 4px 8px; }
   #corner { top: 4px; }
   #countdown { font-size: 90px; }
   .card { padding: 12px 18px; }
   .card h1 { font-size: 36px; }
   .howto { font-size: 13px; margin: 6px 0 10px; }
+}
+
+.btn.small { font-size: 13px; padding: 6px 10px; box-shadow: 0 3px 0 #3a2a1a; }
+.btn.small.on { background: linear-gradient(#b6ff9e, #5cc95c); }
+.seg button:disabled { opacity: 0.45; cursor: not-allowed; }
+.wallet { font-size: 16px; margin: -4px 0 12px; }
+.wallet b { color: #2a8a2a; font-size: 20px; }
+.pay { font-size: 16px; margin-bottom: 14px; color: #2a8a2a; font-weight: 800; }
+#resTable td.sub { font-size: 12px; opacity: 0.7; }
+
+#replayBar {
+  position: fixed; bottom: 8px; left: 0; right: 0; margin: 0 auto; width: fit-content; max-width: calc(100vw - 16px);
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center;
+  background: rgba(30,30,40,0.88); border: 3px solid #3a2a1a; border-radius: 16px; padding: 8px 12px; box-shadow: 0 4px 0 #3a2a1a; color: #fff;
+}
+#replayBar .rec { color: #ff4d4d; font-weight: 900; font-size: 13px; letter-spacing: 1px; animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: 0.3; } }
+#rpScrub { width: min(320px, 40vw); accent-color: #ff4d4d; }
+.rp-time { font-variant-numeric: tabular-nums; min-width: 42px; font-weight: 700; }
+#replayBar .seg { border-color: #fff; }
+#replayBar .seg button { background: #333; color: #fff; border-color: #fff; }
+#replayBar .seg button.on { background: #ffd23f; color: #3a2a1a; }
+
+#shopGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 14px; text-align: left; }
+.item { border: 3px solid #3a2a1a; border-radius: 14px; background: linear-gradient(#fff, #ffe7b0); padding: 10px; box-shadow: 0 3px 0 #3a2a1a; display: flex; flex-direction: column; gap: 6px; }
+.item .top { display: flex; align-items: center; gap: 8px; }
+.item .ic { font-size: 28px; }
+.item .nm { font-weight: 800; font-size: 16px; }
+.item .ds { font-size: 12px; opacity: 0.8; flex: 1; }
+.item.owned { background: linear-gradient(#f2fff0, #c9f2c0); }
+.card#screenShop { max-width: 760px; }
+
+#delaySel { display: none; font: inherit; font-weight: 700; border: 2px solid #3a2a1a; border-radius: 10px; padding: 4px 6px; background: #fff8e6; }
+/* keep the HUD clear of the round corner buttons */
+@media (max-width: 1400px) {
+  #hud { right: 200px; left: 8px; }
+  .hud-box { min-width: 0; }
+}
+/* compact toolbar for phones in landscape and other short screens */
+@media (max-height: 520px) {
+  #toolbar { flex-wrap: nowrap; gap: 8px; padding: 5px 8px; max-width: calc(100vw - 12px); overflow-x: auto; }
+  #toolbar .lbl, #toolbar .hint, #toolbar .kg, #toolbar .tx, #typeCost { display: none; }
+  #toolbar .group { gap: 2px; }
+  #delays { display: none; }
+  #delaySel { display: block; }
+  .strength input[type=range] { width: 110px; }
+  #strengthVal { font-size: 17px; }
+  .seg button { padding: 5px 8px; font-size: 15px; }
+  #btnDetonate { white-space: nowrap; }
+  #hud { right: 170px; }
 }

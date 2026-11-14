@@ -1,48 +1,75 @@
-// Game controller: phases, input, HUD and scoring flow.
+// Game controller: phases, input, HUD, budget/shop, replays and scoring flow.
 (function () {
   const P = window.DemoPhysics;
   const LEVELS = window.LEVELS;
   const $ = (id) => document.getElementById(id);
+  const money = (n) => '$' + Math.round(n).toLocaleString('en-US');
 
   const canvas = $('game');
   const renderer = new Renderer(canvas);
   const audio = new GameAudio();
   window.__implode = { renderer, state: null };
 
-  const STORE_KEY = 'implode-progress-v1';
+  // ---------------- Shop catalogue ----------------
+  const SHOP = [
+    { id: 'megaphone', icon: '📢', name: 'Megaphone', price: 800,
+      desc: 'Adds a “Clear area” button that sends every bystander running out of the danger zone at once.' },
+    { id: 'overtime', icon: '⏱', name: 'Overtime Permit', price: 1500,
+      desc: '+30 seconds of planning time on every job.' },
+    { id: 'detonator', icon: '🎛', name: 'Precision Detonator', price: 2000,
+      desc: 'Finer fuse delays: 0.1s, 0.75s, 2.5s and 3s for perfectly sequenced implosions.' },
+    { id: 'shaped', icon: '🔻', name: 'Shaped Charges', price: 3500,
+      desc: 'Copper-lined charges that focus the blast toward the middle of the building — far less debris thrown outward. Cost 60% more per charge.' },
+    { id: 'netting', icon: '🕸', name: 'Debris Netting', price: 4000,
+      desc: `Hang protective nets on the neighbours (${money(P.NETTING_COST)} per job from the budget). Hits on them cost ~90% less.` },
+    { id: 'cutter', icon: '✂', name: 'Cutter Charges', price: 5000,
+      desc: `Linear cutting charges slice any member — even steel — cleanly with almost no blast. ${money(P.chargeCost('cutter', 0))} each.` },
+  ];
+  const BASE_DELAYS = [0, 0.25, 0.5, 1, 1.5, 2];
+  const FINE_DELAYS = [0, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3];
+  const START_CASH = 1000;
+  const PAY_PER_POINT = 5;
+  const REPLAY_PAY_FRACTION = 0.3;
+
+  const STORE_KEY = 'implode-progress-v2';
   const progress = loadProgress();
 
   const state = {
-    phase: 'title', // title | plan | countdown | blast | result
+    phase: 'title', // title | plan | countdown | blast | result | replay
     levelIndex: 0,
     sim: null,
     strength: 3,
     delay: 0,
+    chargeType: 'standard',
     hover: null,
     planLeft: 0,
+    planTime: 0,
     countdown: 0,
     blastTime: 0,
     settleTime: 0,
-    showLot: true,
     detonatedWithLeft: 0,
+    rec: null,
+    replay: null, // { t, playing, speed }
   };
 
   // ---------------- Persistence ----------------
   function loadProgress() {
     try {
       const p = JSON.parse(localStorage.getItem(STORE_KEY));
-      if (p && p.best) return p;
-    } catch (e) { /* ignore */ }
-    return { unlocked: 1, best: {} };
+      if (p && p.best) return Object.assign({ cash: START_CASH, owned: {} }, p);
+    } catch (e) { /* storage unavailable */ }
+    return { unlocked: 1, best: {}, cash: START_CASH, owned: {} };
   }
   function saveProgress() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(progress)); } catch (e) { /* ignore */ }
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(progress)); } catch (e) { /* storage unavailable */ }
   }
+  const owns = (id) => !!progress.owned[id];
 
   // ---------------- Screens ----------------
   function showScreen(id) {
-    for (const s of ['screenTitle', 'screenLevels', 'screenResult']) $(s).classList.toggle('hidden', s !== id);
+    for (const s of ['screenTitle', 'screenLevels', 'screenShop', 'screenResult']) $(s).classList.toggle('hidden', s !== id);
     $('overlay').classList.toggle('hidden', !id);
+    for (const el of document.querySelectorAll('.cashVal')) el.textContent = money(progress.cash);
   }
 
   function buildLevelGrid() {
@@ -55,11 +82,39 @@
       const locked = i + 1 > progress.unlocked;
       b.disabled = locked;
       const stars = best ? '★'.repeat(best.stars) + '☆'.repeat(3 - best.stars) : '☆☆☆';
-      b.innerHTML = `<span class="n">Job ${L.id}${locked ? ' 🔒' : ''}</span><span class="t">${L.name}</span>
-        <span class="s">${stars}</span><br><span class="b">${best ? 'Best: ' + best.score : L.floors + ' floors · ' + L.bays + ' bays'}</span>`;
+      const mat = P.MATERIALS[L.material || 'concrete'].name;
+      b.innerHTML = `<span class="n">Job ${L.id}${locked ? ' 🔒' : ''} · ${mat}</span><span class="t">${L.name}</span>
+        <span class="s">${stars}</span><br><span class="b">${best ? 'Best: ' + best.score + ' · ' : ''}Budget ${money(L.budget)}</span>`;
       b.onclick = () => { audio.click(); startLevel(i); };
       grid.appendChild(b);
     });
+  }
+
+  function buildShop() {
+    const grid = $('shopGrid');
+    grid.innerHTML = '';
+    for (const it of SHOP) {
+      const d = document.createElement('div');
+      d.className = 'item' + (owns(it.id) ? ' owned' : '');
+      const btn = owns(it.id)
+        ? '<button class="btn small" disabled>Owned ✓</button>'
+        : `<button class="btn small ${progress.cash >= it.price ? 'red' : ''}" ${progress.cash >= it.price ? '' : 'disabled'}>Buy ${money(it.price)}</button>`;
+      d.innerHTML = `<div class="top"><span class="ic">${it.icon}</span><span class="nm">${it.name}</span></div>
+        <div class="ds">${it.desc}</div>${btn}`;
+      const b = d.querySelector('button');
+      if (!owns(it.id)) {
+        b.onclick = () => {
+          if (progress.cash < it.price) return;
+          progress.cash -= it.price;
+          progress.owned[it.id] = true;
+          saveProgress();
+          audio.cash();
+          buildShop();
+          showScreen('screenShop');
+        };
+      }
+      grid.appendChild(d);
+    }
   }
 
   function toast(msg, ms) {
@@ -70,33 +125,87 @@
     toast._t = setTimeout(() => t.classList.add('hidden'), ms || 1800);
   }
 
+  // ---------------- Toolbar ----------------
+  function buildDelays() {
+    const list = owns('detonator') ? FINE_DELAYS : BASE_DELAYS;
+    if (!list.includes(state.delay)) state.delay = 0;
+    const seg = $('delays');
+    seg.innerHTML = '';
+    for (const d of list) {
+      const b = document.createElement('button');
+      b.textContent = d === 0 ? '0s' : String(d);
+      b.classList.toggle('on', d === state.delay);
+      b.onclick = () => {
+        state.delay = d;
+        for (const o of seg.querySelectorAll('button')) o.classList.toggle('on', o === b);
+        audio.click();
+      };
+      seg.appendChild(b);
+    }
+    const sel = $('delaySel');
+    sel.innerHTML = list.map((d) => `<option value="${d}" ${d === state.delay ? 'selected' : ''}>⏱ ${d}s</option>`).join('');
+    sel.onchange = () => {
+      state.delay = +sel.value;
+      for (const o of seg.querySelectorAll('button')) o.classList.toggle('on', +o.textContent.replace('s', '') === state.delay);
+      audio.click();
+    };
+  }
+
+  function refreshToolbar() {
+    for (const b of $('types').querySelectorAll('button')) {
+      const t = b.dataset.t;
+      const avail = t === 'standard' || owns(t);
+      b.disabled = !avail || state.phase !== 'plan';
+      b.title = avail ? '' : 'Buy in the shop';
+      const [ic, tx] = { standard: ['🧨', 'Dynamite'], shaped: ['🔻', 'Shaped'], cutter: ['✂', 'Cutter'] }[t];
+      b.innerHTML = `<span class="ic">${avail ? ic : '🔒'}</span><span class="tx"> ${tx}</span>`;
+      b.classList.toggle('on', t === state.chargeType);
+    }
+    if (state.chargeType !== 'standard' && !owns(state.chargeType)) state.chargeType = 'standard';
+    $('btnNetting').classList.toggle('hidden', !owns('netting'));
+    $('btnMegaphone').classList.toggle('hidden', !owns('megaphone'));
+    if (state.sim) $('btnNetting').classList.toggle('on', state.sim.netting);
+    $('btnNetting').innerHTML = `🕸<span class="tx"> Netting ${state.sim && state.sim.netting ? 'ON' : money(P.NETTING_COST)}</span>`;
+    updateStrengthUi();
+  }
+
+  function setControlsEnabled(on) {
+    for (const el of $('toolbar').querySelectorAll('button, input')) el.disabled = !on;
+    if (on) refreshToolbar();
+  }
+
   // ---------------- Level flow ----------------
   function startLevel(i) {
     const L = LEVELS[i];
     state.levelIndex = i;
     state.sim = P.createSim(L, (Math.random() * 1e9) | 0);
     state.phase = 'plan';
-    state.planLeft = L.planTime;
+    state.planTime = L.planTime + (owns('overtime') ? 30 : 0);
+    state.planLeft = state.planTime;
     state.hover = null;
     state.blastTime = 0;
     state.settleTime = 0;
+    state.rec = null;
+    state.replay = null;
     renderer.clearFx();
     renderer.setLevel(L);
     showScreen(null);
     $('hud').classList.remove('hidden');
     $('toolbar').classList.remove('hidden');
+    $('replayBar').classList.add('hidden');
     $('btnMenu').classList.remove('hidden');
     $('countdown').classList.add('hidden');
     $('levelName').textContent = `${L.id}. ${L.name}`;
     $('timerLabel').textContent = 'Planning time';
+    buildDelays();
     setControlsEnabled(true);
     updateHud();
     audio.setMode('plan');
-    toast(L.blurb, 3500);
+    toast(L.blurb, 4000);
   }
 
-  function setControlsEnabled(on) {
-    for (const el of $('toolbar').querySelectorAll('button, input')) el.disabled = !on;
+  function budgetLeft() {
+    return LEVELS[state.levelIndex].budget - P.spent(state.sim);
   }
 
   function detonate() {
@@ -113,6 +222,8 @@
     const cd = $('countdown');
     cd.textContent = '3';
     cd.classList.remove('hidden');
+    const n = P.peopleInZone(state.sim);
+    if (n) toast(`⚠ ${n} bystander${n > 1 ? 's' : ''} still in the danger zone — tap them!`, 2500);
   }
 
   function beginBlast() {
@@ -121,20 +232,24 @@
     state.blastTime = 0;
     state.sim.time = 0;
     state.sim.acc = 0;
+    P.startRecording(state.sim);
+    P.bystandersAtBlast(state.sim);
     $('timerLabel').textContent = 'Demolition';
   }
 
   function finishBlast() {
     state.phase = 'result';
-    const ev = P.evaluate(state.sim);
+    const sim = state.sim;
+    state.rec = sim.rec ? P.stopRecording(sim) : null;
     const L = LEVELS[state.levelIndex];
-    const timeBonus = ev.success ? Math.round((state.detonatedWithLeft / L.planTime) * 100) : 0;
+    const ev = P.evaluate(sim, L.budget);
+    const timeBonus = ev.success ? Math.round((state.detonatedWithLeft / state.planTime) * 100) : 0;
     const total = ev.success ? ev.score + timeBonus : 0;
     audio.setMode('calm');
     audio.jingle(ev.success);
 
     $('resTitle').textContent = ev.success
-      ? (ev.stars === 3 ? 'Perfect implosion!' : ev.hits === 0 ? 'Clean job!' : 'Demolished!')
+      ? (ev.stars === 3 ? 'Perfect implosion!' : ev.penalty === 0 ? 'Clean job!' : 'Demolished!')
       : 'Building still standing!';
     const starsEl = $('resStars');
     starsEl.innerHTML = '';
@@ -148,38 +263,100 @@
     const rows = [
       ['Collapse', pct(ev.collapse), ev.collapsePts],
       ['Debris kept on the lot', pct(ev.contain), ev.containPts],
-      ['Explosive efficiency', pct(ev.efficiency), ev.effPts],
-      ['Hits on neighbours', String(ev.hits), -ev.penalty],
-      ['Time bonus', Math.round(state.detonatedWithLeft) + 's left', timeBonus],
+      ['Under budget', `${money(ev.spent)} of ${money(ev.budget)}`, ev.budgetPts],
+      ['Hits on neighbours', String(ev.hits), -ev.neighborPen],
     ];
+    if (L.cars && L.cars.length) rows.push(['Cars damaged', String(ev.carHits), -ev.carPen]);
+    rows.push(['Bystanders in the blast zone', String(ev.bystanders), -ev.bystanderPen]);
+    rows.push(['Time bonus', Math.round(state.detonatedWithLeft) + 's left', timeBonus]);
     $('resTable').innerHTML = rows.map(([a, b, c]) =>
       `<tr><td>${a}</td><td>${b}</td><td class="${c < 0 ? 'neg' : ''}">${c > 0 ? '+' : ''}${c}</td></tr>`).join('');
     $('resTotal').textContent = ev.success ? `Score: ${total}` : 'Collapse at least 60% of the building to pass';
 
     const prev = progress.best[L.id];
     let bestMsg = prev ? `Best: ${prev.score}` : '';
+    let pay = 0;
     if (ev.success) {
+      pay = Math.round((total * PAY_PER_POINT * (prev ? REPLAY_PAY_FRACTION : 1)) / 10) * 10;
       if (!prev || total > prev.score) {
         progress.best[L.id] = { score: total, stars: Math.max(ev.stars, prev ? prev.stars : 0) };
         bestMsg = prev ? 'New best score!' : '';
       } else if (ev.stars > prev.stars) prev.stars = ev.stars;
       progress.unlocked = Math.max(progress.unlocked, Math.min(LEVELS.length, state.levelIndex + 2));
+      progress.cash += pay;
       saveProgress();
     }
     $('resBest').textContent = bestMsg;
+    $('resPay').textContent = ev.success
+      ? `💰 Payout: ${money(pay)}${prev ? ' (repeat job, 30%)' : ''} · Company cash: ${money(progress.cash)}`
+      : `No payout · Company cash: ${money(progress.cash)}`;
     const hasNext = state.levelIndex + 1 < LEVELS.length;
     $('btnNext').classList.toggle('hidden', !(ev.success && hasNext));
+    $('btnReplay').classList.toggle('hidden', !state.rec || state.rec.frames.length < 2);
+    if (pay) setTimeout(() => audio.cash(), 900);
     setTimeout(() => { if (state.phase === 'result') showScreen('screenResult'); }, 600);
   }
 
   function goLevels() {
     audio.setMode('title');
     state.phase = 'title';
+    state.replay = null;
     $('hud').classList.add('hidden');
     $('toolbar').classList.add('hidden');
+    $('replayBar').classList.add('hidden');
     $('countdown').classList.add('hidden');
     buildLevelGrid();
     showScreen('screenLevels');
+  }
+
+  // ---------------- Replay ----------------
+  function frameIndexAt(rec, t) {
+    let lo = 0, hi = rec.frames.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (rec.frames[mid].t <= t) lo = mid; else hi = mid - 1;
+    }
+    return lo;
+  }
+
+  function startReplay() {
+    if (!state.rec) return;
+    state.phase = 'replay';
+    state.replay = { t: 0, playing: true, speed: state.replay ? state.replay.speed : 0.5 };
+    renderer.clearFx();
+    showScreen(null);
+    $('toolbar').classList.add('hidden');
+    $('replayBar').classList.remove('hidden');
+    $('timerLabel').textContent = 'Replay';
+    $('rpPlay').textContent = '❚❚';
+    syncSpeedButtons();
+    audio.setMode('calm');
+    // fire any effects that happened right at t = 0 (bystanders, first charges)
+    emitReplayFx(-1, 0);
+  }
+
+  function endReplay() {
+    state.phase = 'result';
+    state.replay = null;
+    renderer.clearFx();
+    $('replayBar').classList.add('hidden');
+    $('timerLabel').textContent = 'Demolition';
+    showScreen('screenResult');
+  }
+
+  function syncSpeedButtons() {
+    for (const b of $('rpSpeeds').querySelectorAll('button')) b.classList.toggle('on', +b.dataset.s === state.replay.speed);
+  }
+
+  function emitReplayFx(t0, t1) {
+    for (const f of state.rec.fxLog) if (f.t > t0 && f.t <= t1) playFx(f);
+  }
+
+  function replayDuration() { return state.rec.frames[state.rec.frames.length - 1].t; }
+
+  function seekReplay(t) {
+    state.replay.t = Math.max(0, Math.min(replayDuration(), t));
+    renderer.clearFx();
   }
 
   // ---------------- HUD ----------------
@@ -193,10 +370,16 @@
     if (!sim) return;
     const L = LEVELS[state.levelIndex];
     $('chargeCount').textContent = `${sim.charges.length} / ${L.maxCharges}`;
+    const left = budgetLeft();
+    $('budgetLeft').textContent = money(left);
+    $('budgetLeft').style.color = left < L.budget * 0.15 ? '#d62828' : '';
     const tb = $('timer').parentElement;
     if (state.phase === 'plan' || state.phase === 'countdown') {
       $('timer').textContent = fmtTime(state.planLeft);
       tb.classList.toggle('warn', state.phase === 'plan' && state.planLeft <= 10);
+    } else if (state.phase === 'replay') {
+      $('timer').textContent = (state.replay.t / 1000).toFixed(1) + 's';
+      tb.classList.remove('warn');
     } else {
       $('timer').textContent = state.blastTime.toFixed(1) + 's';
       tb.classList.remove('warn');
@@ -205,14 +388,23 @@
 
   function updateStrengthUi() {
     const s = state.strength;
+    const cutter = state.chargeType === 'cutter';
     $('strength').value = s;
-    $('strengthVal').textContent = s;
-    $('strengthKg').textContent = `(${(s * s * 0.25).toFixed(s < 3 ? 2 : 1)} kg)`;
-    const hint = s < 3 ? 'Too weak to cut columns — only loosens joints'
-      : s < 4 ? 'Cuts columns (not slabs)'
-        : s < 7 ? 'Cuts columns and slabs'
-          : 'Heavy — expect flying debris!';
+    $('strength').disabled = cutter || state.phase !== 'plan';
+    $('strengthVal').textContent = cutter ? '—' : s;
+    $('strengthKg').textContent = cutter ? '(fixed)' : `(${(s * s * 0.25).toFixed(s < 3 ? 2 : 1)} kg)`;
+    const mat = state.sim ? state.sim.mat : P.MATERIALS.concrete;
+    let hint;
+    if (cutter) hint = 'Slices any member cleanly — no strength needed';
+    else if (s < mat.colTough) hint = `Too weak for ${mat.name.toLowerCase()} columns (need ${mat.colTough}+)`;
+    else if (s < mat.slabTough) hint = `Cuts columns (slabs need ${mat.slabTough}+)`;
+    else if (s < 7) hint = 'Cuts columns and slabs';
+    else hint = 'Heavy — expect flying debris!';
     $('strengthHint').textContent = hint;
+    const cost = P.chargeCost(state.chargeType, s);
+    $('typeCost').textContent = `${money(cost)} each`;
+    $('typeHint').textContent = state.chargeType === 'shaped' ? 'Blast aims at the building centre'
+      : state.chargeType === 'cutter' ? 'Clean cut, tiny blast' : 'Classic all-round blast';
   }
 
   // ---------------- Input ----------------
@@ -223,6 +415,8 @@
 
   function computeHover(p) {
     const sim = state.sim;
+    const person = P.personAt(sim, p, Math.max(9, 16 / renderer.scale));
+    if (person) return { person };
     for (const ch of sim.charges) {
       const cp = P.chargePos(ch);
       if (Math.hypot(cp.x - p.x, cp.y - p.y) < Math.max(11, 16 / renderer.scale)) return { charge: ch };
@@ -230,20 +424,24 @@
     const body = P.pieceAt(sim, p);
     if (!body) return null;
     const pc = body.plugin.piece;
+    if (pc.kind === 'wall' && state.chargeType !== 'cutter') return { body: null, point: null, wall: true };
     if (pc.kind === 'wall') return { body: null, point: null, wall: true };
     // snap the charge to the member's centre line
     const local = Matter.Vector.rotate(Matter.Vector.sub(p, body.position), -body.angle);
     if (pc.kind === 'column') { local.x = 0; local.y = Math.max(-pc.h / 2 + 7, Math.min(pc.h / 2 - 7, local.y)); }
-    else { local.y = 0; local.x = Math.max(-pc.w / 2 + 6, Math.min(pc.w / 2 - 6, local.x)); }
+    else if (pc.kind === 'slab') { local.y = 0; local.x = Math.max(-pc.w / 2 + 6, Math.min(pc.w / 2 - 6, local.x)); }
+    else { local.x = Math.max(-pc.w / 2 + 6, Math.min(pc.w / 2 - 6, local.x)); local.y = Math.max(-pc.h / 2 + 6, Math.min(pc.h / 2 - 6, local.y)); }
     const point = Matter.Vector.add(body.position, Matter.Vector.rotate(local, body.angle));
     let weak = null;
-    if (state.strength < pc.toughness) weak = `Needs strength ${pc.toughness}+ to cut this ${pc.kind}`;
-    return { body, point, weak };
+    const label = { column: 'column', slab: 'slab', tank: 'water tank', sign: 'billboard' }[pc.kind];
+    if (state.chargeType !== 'cutter' && state.strength < pc.toughness) weak = `Needs strength ${pc.toughness}+ to cut this ${label}`;
+    const cost = P.chargeCost(state.chargeType, state.strength);
+    return { body, point, weak, cost: `${money(cost)} · ${money(budgetLeft())} left` };
   }
 
   // ---- Touch & mouse: tap = plant/remove, one-finger drag = pan, pinch = zoom ----
   const pointers = new Map(); // pointerId -> {x, y}
-  let gesture = null; // { startX, startY, moved, pinchDist, button, pointerType }
+  let gesture = null;
   const TAP_SLOP = 10;
 
   function screenPos(e) {
@@ -259,26 +457,35 @@
   function updateHover(e) {
     if (state.phase !== 'plan') { state.hover = null; canvas.style.cursor = 'default'; return; }
     state.hover = computeHover(eventWorld(e));
-    canvas.style.cursor = state.hover && (state.hover.body || state.hover.charge) ? 'crosshair' : 'grab';
+    const h = state.hover;
+    canvas.style.cursor = h && h.person ? 'pointer' : h && (h.body || h.charge) ? 'crosshair' : 'grab';
   }
 
   function tapAt(e) {
-    if (state.phase !== 'plan') return;
+    if (state.phase !== 'plan' && state.phase !== 'countdown') return;
+    const sim = state.sim;
     const h = computeHover(eventWorld(e));
+    if (h && h.person) {
+      P.shoo(sim, h.person);
+      audio.shoo();
+      return;
+    }
+    if (state.phase !== 'plan') return;
     state.hover = h;
     if (!h) return;
-    const sim = state.sim;
     if (h.charge) {
       sim.charges.splice(sim.charges.indexOf(h.charge), 1);
       audio.remove();
       state.hover = null;
     } else if (h.wall) {
       audio.error();
-      toast('Wall panels are just cladding — target columns and floor slabs');
+      toast('Wall panels are just cladding — target columns, slabs or rooftop structures');
     } else if (h.body) {
       const L = LEVELS[state.levelIndex];
+      const cost = P.chargeCost(state.chargeType, state.strength);
       if (sim.charges.length >= L.maxCharges) { audio.error(); toast(`Charge limit reached (${L.maxCharges})`); return; }
-      P.addCharge(sim, h.body, h.point, state.strength, state.delay);
+      if (cost > budgetLeft()) { audio.error(); toast(`Over budget! This charge costs ${money(cost)}, you have ${money(budgetLeft())} left`); return; }
+      P.addCharge(sim, h.body, h.point, state.strength, state.delay, state.chargeType);
       audio.place();
       state.hover = e.pointerType === 'mouse' ? computeHover(eventWorld(e)) : null;
     }
@@ -326,7 +533,6 @@
     if (!pointers.has(e.pointerId)) return;
     pointers.delete(e.pointerId);
     if (pointers.size === 1 && gesture) {
-      // one finger lifted out of a pinch: keep panning with the remaining finger
       const [rest] = pointers.values();
       gesture.pinch = null; gesture.lastX = rest.x; gesture.lastY = rest.y;
       return;
@@ -339,10 +545,9 @@
   }
   canvas.addEventListener('pointerup', (e) => endPointer(e, false));
   canvas.addEventListener('pointercancel', (e) => endPointer(e, true));
-  canvas.addEventListener('pointerleave', (e) => { if (!pointers.size) state.hover = null; });
+  canvas.addEventListener('pointerleave', () => { if (!pointers.size) state.hover = null; });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-  // Mouse wheel / trackpad pinch zoom on desktop
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const p = screenPos(e);
@@ -350,7 +555,6 @@
     renderer.zoomAt(p.x, p.y, factor);
   }, { passive: false });
 
-  // Stop iOS Safari from zooming the whole page instead of the game
   for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault());
   document.addEventListener('dblclick', (e) => e.preventDefault());
 
@@ -361,7 +565,9 @@
       state.strength = k === '0' ? 10 : +k;
       updateStrengthUi();
     } else if (k === ' ' && state.phase === 'plan') { e.preventDefault(); detonate(); }
+    else if (k === ' ' && state.phase === 'replay') { e.preventDefault(); $('rpPlay').click(); }
     else if (k === 'r' && state.sim && state.phase !== 'title') startLevel(state.levelIndex);
+    else if (k === 'escape' && state.phase === 'replay') endReplay();
     else if (k === 'escape' && state.phase !== 'title') goLevels();
     else if (k === 'm') toggleMusic();
     else if (k === 'v') renderer.resetCamera();
@@ -371,21 +577,58 @@
   });
 
   $('strength').addEventListener('input', (e) => { state.strength = +e.target.value; updateStrengthUi(); });
-  for (const b of $('delays').querySelectorAll('button')) {
+  for (const b of $('types').querySelectorAll('button')) {
     b.addEventListener('click', () => {
-      state.delay = +b.dataset.d;
-      for (const o of $('delays').querySelectorAll('button')) o.classList.toggle('on', o === b);
+      const t = b.dataset.t;
+      if (t !== 'standard' && !owns(t)) { toast('Buy this in the shop first'); return; }
+      state.chargeType = t;
       audio.click();
+      refreshToolbar();
     });
   }
+  $('btnNetting').onclick = () => {
+    if (state.phase !== 'plan') return;
+    const sim = state.sim;
+    if (!sim.netting && budgetLeft() < P.NETTING_COST) { audio.error(); toast('Not enough budget for netting'); return; }
+    sim.netting = !sim.netting;
+    audio.click();
+    refreshToolbar();
+    updateHud();
+  };
+  $('btnMegaphone').onclick = () => {
+    if (state.phase !== 'plan' && state.phase !== 'countdown') return;
+    P.shooAll(state.sim);
+    audio.shoo();
+    toast('📢 “Clear the area, please!”');
+  };
   $('btnClear').onclick = () => { if (state.phase === 'plan') { state.sim.charges = []; audio.remove(); updateHud(); } };
   $('btnDetonate').onclick = () => { audio.unlock(); detonate(); };
   $('btnPlay').onclick = () => { audio.unlock(); audio.click(); audio.setMode('title'); buildLevelGrid(); showScreen('screenLevels'); };
   $('btnBackTitle').onclick = () => { audio.click(); showScreen('screenTitle'); };
+  $('btnShop').onclick = () => { audio.click(); buildShop(); showScreen('screenShop'); };
+  $('btnShopBack').onclick = () => { audio.click(); buildLevelGrid(); showScreen('screenLevels'); };
   $('btnLevels').onclick = () => { audio.click(); goLevels(); };
   $('btnRetry').onclick = () => { audio.click(); startLevel(state.levelIndex); };
   $('btnNext').onclick = () => { audio.click(); startLevel(state.levelIndex + 1); };
   $('btnMenu').onclick = () => { audio.click(); goLevels(); };
+  $('btnReplay').onclick = () => { audio.click(); startReplay(); };
+
+  $('rpPlay').onclick = () => {
+    const r = state.replay;
+    if (!r) return;
+    if (!r.playing && r.t >= replayDuration()) seekReplay(0);
+    r.playing = !r.playing;
+    $('rpPlay').textContent = r.playing ? '❚❚' : '▶';
+  };
+  $('rpRestart').onclick = () => { if (state.replay) { seekReplay(0); emitReplayFx(-1, 0); } };
+  $('rpScrub').addEventListener('input', (e) => {
+    if (!state.replay) return;
+    seekReplay((+e.target.value / 1000) * replayDuration());
+  });
+  for (const b of $('rpSpeeds').querySelectorAll('button')) {
+    b.onclick = () => { if (state.replay) { state.replay.speed = +b.dataset.s; syncSpeedButtons(); } };
+  }
+  $('rpDone').onclick = () => { audio.click(); endReplay(); };
 
   function toggleMusic() { audio.unlock(); audio.setMusic(!audio.musicOn); $('btnMusic').classList.toggle('off', !audio.musicOn); }
   function toggleSfx() { audio.unlock(); audio.setSfx(!audio.sfxOn); $('btnSfx').classList.toggle('off', !audio.sfxOn); }
@@ -395,70 +638,103 @@
   window.addEventListener('resize', () => renderer.resize());
   document.addEventListener('pointerdown', () => audio.unlock(), { once: true });
 
-  // ---------------- Main loop ----------------
+  // ---------------- Effects ----------------
+  function playFx(f) {
+    if (f.type === 'explosion') {
+      renderer.addExplosion(f.x, f.y, f.strength);
+      audio.explosion(f.strength);
+    } else if (f.type === 'cut') {
+      renderer.addCut(f.x, f.y, f.vertical);
+      audio.cut();
+    } else if (f.type === 'crush') {
+      renderer.addDust(f.x, f.y, 5, true, f.material === 'brick');
+      audio.crumble(4);
+      audio.rumble();
+    } else if (f.type === 'impact') {
+      if (f.ground && f.speed > 2.5) renderer.addDust(f.x, f.y, f.mass > 1 ? 4 : 1, f.mass > 1, f.material === 'brick');
+      audio.crumble(Math.min(6, f.speed * f.mass));
+    } else if (f.type === 'glass') {
+      renderer.addGlass(f.x, f.y, f.w, f.h);
+      audio.glass();
+    } else if (f.type === 'hit') {
+      renderer.addText(f.x, f.y - 10, `-${f.pen}${f.fragile ? ' ⛪' : ''}`, 'rgba(255,70,60,A)');
+      audio.hit();
+    } else if (f.type === 'car') {
+      renderer.addText(f.x, f.y - 10, `-${f.pen} 🚗`, 'rgba(255,170,40,A)');
+      audio.carAlarm();
+    } else if (f.type === 'bystander') {
+      renderer.addText(f.x, f.y, `-${f.pen} 😱`, 'rgba(255,90,200,A)');
+      audio.scream();
+    }
+  }
+
   function handleFx() {
     const sim = state.sim;
-    for (const f of sim.fx) {
-      if (f.type === 'explosion') {
-        renderer.addExplosion(f.x, f.y, f.strength);
-        audio.explosion(f.strength);
-      } else if (f.type === 'crush') {
-        renderer.addDust(f.x, f.y, 5, true);
-        audio.crumble(4);
-        audio.rumble();
-      } else if (f.type === 'impact') {
-        if (f.ground && f.speed > 2.5) renderer.addDust(f.x, f.y, f.mass > 1 ? 4 : 1, f.mass > 1);
-        audio.crumble(Math.min(6, f.speed * f.mass));
-      } else if (f.type === 'hit') {
-        renderer.addText(f.x, f.y - 10, `-${f.pen}`, 'rgba(255,70,60,A)');
-        audio.hit();
-      }
-    }
+    for (const f of sim.fx) playFx(f);
     sim.fx.length = 0;
   }
 
+  // ---------------- Main loop ----------------
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
+    const sim = state.sim;
 
     if (state.phase === 'plan') {
       state.planLeft -= dt;
+      P.updatePeople(sim, dt, true);
       if (state.planLeft <= 0) {
         state.planLeft = 0;
-        if (state.sim.charges.length) { toast("Time's up — detonating!"); detonate(); }
+        if (sim.charges.length) { toast("Time's up — detonating!"); detonate(); }
         else { toast("Time's up!"); state.phase = 'blast'; state.blastTime = 0; setControlsEnabled(false); }
       }
     } else if (state.phase === 'countdown') {
+      P.updatePeople(sim, dt, false);
       const before = Math.ceil(state.countdown);
       state.countdown -= dt;
       const after = Math.ceil(state.countdown);
       if (after !== before && after > 0) { $('countdown').textContent = after; audio.beep(false); }
       if (state.countdown <= 0) { audio.beep(true); beginBlast(); }
     } else if (state.phase === 'blast') {
-      const maxDelay = Math.max(0, ...state.sim.charges.map((c) => c.delay));
-      // brief slow motion right after each blast wave for drama
+      const maxDelay = Math.max(0, ...sim.charges.map((c) => c.delay));
+      // brief slow motion right after the blasts for drama
       const t = state.blastTime;
       const slow = t < maxDelay + 0.6 ? 0.45 : t < maxDelay + 1.4 ? 0.45 + (t - maxDelay - 0.6) / 0.8 * 0.55 : 1;
       state.blastTime += dt * slow;
-      P.step(state.sim, dt * 1000 * slow);
+      P.step(sim, dt * 1000 * slow);
       handleFx();
-      if (state.blastTime > maxDelay + 2.5) P.allowSleep(state.sim);
-      const k = P.kineticLevel(state.sim);
+      if (state.blastTime > maxDelay + 2.5) P.allowSleep(sim);
+      const k = P.kineticLevel(sim);
       if (state.blastTime > maxDelay + 3 && k < 0.05) state.settleTime += dt; else state.settleTime = 0;
       if (state.settleTime > 0.8 || state.blastTime > maxDelay + 14) finishBlast();
     } else if (state.phase === 'result') {
-      P.step(state.sim, dt * 1000);
+      P.step(sim, dt * 1000);
       handleFx();
+    } else if (state.phase === 'replay') {
+      const r = state.replay;
+      const dur = replayDuration();
+      if (r.playing) {
+        const t0 = r.t;
+        r.t = Math.min(dur, r.t + dt * 1000 * r.speed);
+        emitReplayFx(t0, r.t);
+        if (r.t >= dur) { r.playing = false; $('rpPlay').textContent = '▶'; }
+      }
+      $('rpScrub').value = Math.round((r.t / dur) * 1000);
+      $('rpTime').textContent = (r.t / 1000).toFixed(1) + 's';
     }
 
-    const tb = $('toolbar');
-    const bottomInset = tb.classList.contains('hidden') ? 10 : tb.offsetHeight + 16;
+    const bar = state.phase === 'replay' ? $('replayBar') : $('toolbar');
+    const bottomInset = bar.classList.contains('hidden') ? 10 : bar.offsetHeight + 16;
     renderer.setInsets(window.innerHeight < 500 ? 46 : 70, Math.max(bottomInset, window.innerHeight < 500 ? 50 : 90));
-    renderer.update(dt);
+    // particles run at replay speed so slow-mo looks right
+    renderer.update(state.phase === 'replay' && state.replay.playing ? dt * state.replay.speed : state.phase === 'replay' ? 0 : dt);
+    const scene = state.phase === 'replay'
+      ? P.frameScene(sim, state.rec, frameIndexAt(state.rec, state.replay.t))
+      : P.liveScene(sim);
     renderer.draw({
-      sim: state.sim, phase: state.phase, hover: state.phase === 'plan' ? state.hover : null,
-      strength: state.strength, delay: state.delay, showLot: state.phase === 'plan',
+      scene, phase: state.phase, hover: state.phase === 'plan' ? state.hover : null,
+      strength: state.strength, delay: state.delay, chargeType: state.chargeType, showLot: state.phase === 'plan',
     });
     $('btnView').classList.toggle('hidden', !renderer.isZoomed());
     updateHud();
@@ -466,6 +742,7 @@
   }
 
   window.__implode.state = state;
+  window.__implode.progress = progress;
   // Title screen backdrop: show the first level standing
   state.sim = P.createSim(LEVELS[0], 1);
   updateStrengthUi();

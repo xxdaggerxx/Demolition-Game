@@ -1,62 +1,86 @@
 // Level definitions. World is 1600 x 900 units, ground at y = 820.
-// The target building is centred on `x`. Neighbours define the "lot":
-// everything between the inner edges of the two neighbours is the safe zone.
+// The target building is centred on `x`. The lot is the building footprint plus
+// `lotPad` on each side; between the lot and the neighbours is the street,
+// where cars park and bystanders wander in.
 (function (root) {
   const LEVELS = [
     {
       id: 1,
       name: 'First Job',
-      blurb: 'A small office block with plenty of room around it. Cut the ground-floor columns.',
-      bays: 4, floors: 5, bayW: 64, floorH: 58, x: 800,
+      blurb: 'A small concrete office block. Cut the ground-floor columns — and shoo away anyone who wanders in!',
+      material: 'concrete', bays: 4, floors: 5, bayW: 64, floorH: 58, x: 800, lotPad: 45,
       neighbors: [
-        { x: 420, w: 180, h: 200, color: '#5aa9e6', style: 'office' },
-        { x: 1180, w: 170, h: 240, color: '#f4a259', style: 'brick' },
+        { x: 455, w: 180, h: 200, color: '#5aa9e6', style: 'office' },
+        { x: 1140, w: 170, h: 240, color: '#f4a259', style: 'brick' },
       ],
-      maxCharges: 8, planTime: 90,
+      cars: [585],
+      people: { every: 10, max: 2 },
+      budget: 2500, maxCharges: 8, planTime: 90,
     },
     {
       id: 2,
       name: 'Downtown Tower',
-      blurb: 'Taller and narrower. Make it fall straight down — not sideways.',
-      bays: 4, floors: 9, bayW: 60, floorH: 56, x: 800,
+      blurb: 'Taller, with a heavy water tank on the roof. Make it fall straight down — not sideways.',
+      material: 'concrete', bays: 4, floors: 9, bayW: 60, floorH: 56, x: 800, lotPad: 35, roof: 'tank',
       neighbors: [
-        { x: 505, w: 160, h: 330, color: '#8ac926', style: 'office' },
-        { x: 1105, w: 170, h: 280, color: '#ff6b6b', style: 'brick' },
+        { x: 495, w: 160, h: 330, color: '#8ac926', style: 'office' },
+        { x: 1110, w: 170, h: 280, color: '#ff6b6b', style: 'brick' },
       ],
-      maxCharges: 10, planTime: 90,
+      cars: [990],
+      people: { every: 8, max: 3 },
+      budget: 3200, maxCharges: 10, planTime: 90,
     },
     {
       id: 3,
-      name: 'Tight Squeeze',
-      blurb: 'The neighbours are inches away. Keep your charges small.',
-      bays: 5, floors: 7, bayW: 58, floorH: 56, x: 800,
+      name: 'Old Brick Mill',
+      blurb: 'Brick crumbles easily — but that is a 200-year-old church next door. Hits on it cost double!',
+      material: 'brick', bays: 5, floors: 5, bayW: 56, floorH: 54, x: 800, lotPad: 35,
       neighbors: [
-        { x: 545, w: 150, h: 420, color: '#c77dff', style: 'office' },
-        { x: 1060, w: 160, h: 380, color: '#4ecdc4', style: 'brick' },
+        { x: 480, w: 160, h: 260, color: '#c77dff', style: 'office' },
+        { x: 1120, w: 180, h: 190, color: '#d8cbb0', style: 'church', fragile: true },
       ],
-      maxCharges: 12, planTime: 100,
+      cars: [598],
+      people: { every: 8, max: 3 },
+      budget: 2400, maxCharges: 12, planTime: 100,
     },
     {
       id: 4,
       name: 'The Wide Load',
-      blurb: 'A long, low warehouse. Charges need to be spread out.',
-      bays: 8, floors: 4, bayW: 62, floorH: 60, x: 800,
+      blurb: 'A steel-framed warehouse. Steel bends instead of shattering — it needs strength 6+, or cutter charges.',
+      material: 'steel', bays: 8, floors: 4, bayW: 62, floorH: 60, x: 800, lotPad: 30,
       neighbors: [
-        { x: 410, w: 140, h: 300, color: '#ffbe0b', style: 'brick' },
-        { x: 1195, w: 150, h: 260, color: '#3a86ff', style: 'office' },
+        { x: 400, w: 140, h: 300, color: '#ffbe0b', style: 'brick' },
+        { x: 1205, w: 150, h: 260, color: '#3a86ff', style: 'office' },
       ],
-      maxCharges: 14, planTime: 100,
+      cars: [497, 1104],
+      people: { every: 9, max: 3 },
+      budget: 5200, maxCharges: 14, planTime: 110,
     },
     {
       id: 5,
+      name: 'Glass Office',
+      blurb: 'A glass curtain wall. Every blast sprays shards — and there is a billboard on the roof.',
+      material: 'glass', bays: 4, floors: 8, bayW: 60, floorH: 56, x: 800, lotPad: 35, roof: 'sign',
+      neighbors: [
+        { x: 500, w: 150, h: 380, color: '#4ecdc4', style: 'glass' },
+        { x: 1100, w: 160, h: 300, color: '#ef476f', style: 'brick' },
+      ],
+      cars: [612, 990],
+      people: { every: 7, max: 3 },
+      budget: 3400, maxCharges: 12, planTime: 100,
+    },
+    {
+      id: 6,
       name: 'The Needle',
-      blurb: 'A slender skyscraper hemmed in by towers. Sequence your delays!',
-      bays: 3, floors: 13, bayW: 62, floorH: 54, x: 800,
+      blurb: 'A slender skyscraper hemmed in by towers, with a water tank up top. Sequence your delays!',
+      material: 'concrete', bays: 3, floors: 13, bayW: 62, floorH: 54, x: 800, lotPad: 28, roof: 'tank',
       neighbors: [
         { x: 575, w: 150, h: 480, color: '#ef476f', style: 'glass' },
         { x: 1025, w: 150, h: 520, color: '#06d6a0', style: 'glass' },
       ],
-      maxCharges: 12, planTime: 120,
+      cars: [],
+      people: { every: 6, max: 4 },
+      budget: 4000, maxCharges: 12, planTime: 120,
     },
   ];
   root.LEVELS = LEVELS;

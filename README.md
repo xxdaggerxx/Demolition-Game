@@ -26,6 +26,45 @@ There is no build step. Either:
 | Retry / level select | | `R` / `Esc` |
 | Music / sound effects | ♫ / 🔊 buttons | `M` / `S` |
 
+| Shoo a bystander | Tap/click the person | |
+| Replay controls | ↺ restart · ❚❚/▶ · scrubber · ¼× ½× 1× | `Space` play/pause, `Esc` close |
+
+### Budget, cash and the shop
+
+- Every job has a **budget**. Each charge costs money: dynamite is $150 + $40 per strength
+  level, shaped charges cost 60% more, and cutter charges are a flat $450. Unspent budget
+  earns bonus points.
+- A successful job pays **5 × your score** into your company cash. Repeating a job you've
+  already cleared pays 30%.
+- Spend the cash in the **🛒 shop**:
+
+| Item | Price | Effect |
+| --- | --- | --- |
+| 📢 Megaphone | $800 | “Clear area” button that shoos every bystander at once |
+| ⏱ Overtime Permit | $1,500 | +30 s planning time |
+| 🎛 Precision Detonator | $2,000 | Finer fuse delays (0.1, 0.75, 2.5, 3 s) |
+| 🔻 Shaped Charges | $3,500 | Blast is focused toward the building's centre, so less debris flies outward |
+| 🕸 Debris Netting | $4,000 | Nets on the neighbours ($600 per job); hits on them cost ~90% less |
+| ✂ Cutter Charges | $5,000 | Slices any member, even steel, with almost no blast |
+
+### Building types and street hazards
+
+- **Concrete** is the classic: it collapses floor by floor into a dusty pile.
+- **Brick** crumbles easily (strength 2+), but breaks into lots of rubble.
+- **Steel** bends instead of shattering and needs strength 6+, or cutter charges.
+- **Glass** curtain walls burst into shards when a blast goes off nearby.
+- **Rooftop** water tanks and billboards sit high up and like to topple sideways.
+- **Parked cars** in the street cost 30 points per hit (up to 3 hits per car), and their
+  alarms go off.
+- **Bystanders** wander into the danger zone while you plan. Tap them to send them away.
+  Anyone still in the zone at detonation costs 75 points.
+- The **historic church** next to the Old Brick Mill doubles neighbour-hit penalties.
+
+### Instant replay
+
+After every demolition, hit **🎬 Replay** to watch it again. You can play it at ¼×, ½× or
+1× speed, scrub back and forth, and pinch-zoom anywhere.
+
 ### Rules and scoring
 
 - **Planning timer**: each job has a time limit. When it runs out, whatever you planted
@@ -35,10 +74,10 @@ There is no build step. Either:
   much harder; the kick grows faster than the strength does.
 - **Fuse delay**: sequence the blasts. For example, cut the middle columns first so the
   outer walls get pulled inward.
-- **Score** = collapse (up to 400) + debris kept on the lot (up to 400) + explosive
-  efficiency (up to 200) − penalties for hitting neighbours + time bonus (up to 100).
+- **Score** = collapse (up to 400) + debris kept on the lot (up to 400) + under-budget
+  bonus (up to 200) − penalties (neighbours, cars, bystanders) + time bonus (up to 100).
 - To pass, at least 60% of the building has to come down. Three stars needs a high score
-  and no hits on the neighbours at all.
+  and no penalties at all.
 
 ## How the physics works
 
@@ -67,8 +106,9 @@ audio files.
 ```
 index.html        UI shell (HUD, toolbar, menus)
 css/style.css     styling
-js/levels.js      the five demolition jobs
-js/physics.js     building construction, explosives, collapse and scoring (also runs in Node)
+js/levels.js      the six demolition jobs
+js/physics.js     building materials, explosives, collapse, cars, bystanders, replay
+                  recording and scoring (also runs in Node)
 js/render.js      canvas renderer, particles, dust and camera shake
 js/audio.js       procedural music and sound effects
 js/game.js        game flow, input and HUD

@@ -13,6 +13,7 @@
   <div id="hud" class="hidden">
     <div class="hud-box" id="hudLevel"><span class="lbl">Level</span><b id="levelName">—</b></div>
     <div class="hud-box timer-box"><span class="lbl" id="timerLabel">Planning time</span><b id="timer">1:30</b></div>
+    <div class="hud-box"><span class="lbl">Budget</span><b id="budgetLeft">$0</b></div>
     <div class="hud-box"><span class="lbl">Charges</span><b id="chargeCount">0 / 0</b></div>
   </div>
 
@@ -25,27 +26,47 @@
 
   <!-- Bottom toolbar -->
   <div id="toolbar" class="hidden">
+    <div class="group">
+      <div class="row"><span class="lbl">Charge type</span><span id="typeCost" class="kg"></span></div>
+      <div class="seg" id="types">
+        <button data-t="standard" class="on">🧨 Dynamite</button>
+        <button data-t="shaped">🔻 Shaped</button>
+        <button data-t="cutter">✂ Cutter</button>
+      </div>
+      <div class="hint" id="typeHint"></div>
+    </div>
     <div class="group strength">
-      <div class="row"><span class="lbl">Charge strength</span><b id="strengthVal">3</b><span id="strengthKg" class="kg"></span></div>
+      <div class="row"><span class="lbl">Strength</span><b id="strengthVal">3</b><span id="strengthKg" class="kg"></span></div>
       <input type="range" id="strength" min="1" max="10" step="1" value="3" />
       <div id="strengthHint" class="hint"></div>
     </div>
     <div class="group">
       <div class="row"><span class="lbl">Fuse delay</span></div>
-      <div class="seg" id="delays">
-        <button data-d="0" class="on">0s</button>
-        <button data-d="0.25">0.25</button>
-        <button data-d="0.5">0.5</button>
-        <button data-d="1">1s</button>
-        <button data-d="1.5">1.5</button>
-        <button data-d="2">2s</button>
-      </div>
+      <div class="seg" id="delays"></div>
+      <select id="delaySel" title="Fuse delay"></select>
       <div class="hint">Stagger charges to steer the fall</div>
     </div>
     <div class="group actions">
+      <button id="btnNetting" class="btn small hidden" title="Hang debris netting on the neighbours">🕸 Netting</button>
+      <button id="btnMegaphone" class="btn small hidden" title="Clear all bystanders">📢<span class="tx"> Clear area</span></button>
       <button id="btnClear" class="btn">Clear</button>
       <button id="btnDetonate" class="btn red big">💥 DETONATE</button>
     </div>
+  </div>
+
+  <!-- Replay controls -->
+  <div id="replayBar" class="hidden">
+    <span class="rec">● REPLAY</span>
+    <button id="rpRestart" class="btn small" title="Back to start">↺</button>
+    <button id="rpPlay" class="btn small" title="Play / pause">❚❚</button>
+    <input type="range" id="rpScrub" min="0" max="1000" value="0" />
+    <span id="rpTime" class="rp-time">0.0s</span>
+    <div class="seg" id="rpSpeeds">
+      <button data-s="0.25">¼×</button>
+      <button data-s="0.5" class="on">½×</button>
+      <button data-s="1">1×</button>
+    </div>
+    <button id="rpDone" class="btn small red">Done</button>
   </div>
 
   <div id="countdown" class="hidden"></div>
@@ -60,6 +81,8 @@
         <b>on its own footprint</b>. Debris that hits the neighbouring buildings costs you points.</p>
       <ul class="howto">
         <li><b>Tap/click</b> a column or floor slab to plant a charge. Tap a charge to remove it.</li>
+        <li>Every charge costs money from the job's <b>budget</b>. Earn cash, then upgrade in the <b>shop</b>.</li>
+        <li><b>Tap bystanders</b> to shoo them out of the danger zone, and don't crush the parked cars.</li>
         <li><b>Pinch</b> (or mouse wheel) to zoom, <b>drag</b> to move the camera.</li>
         <li><b>Strength</b> 1–10: columns need ≥3 to cut, slabs ≥4. Stronger = bigger blast, more flying debris.</li>
         <li><b>Fuse delay</b> lets you sequence the blasts — cut the middle first so it falls inward.</li>
@@ -70,8 +93,18 @@
     </div>
     <div class="card hidden" id="screenLevels">
       <h2>Choose a job</h2>
+      <div class="wallet">Company cash: <b class="cashVal">$0</b></div>
       <div id="levelGrid"></div>
-      <button class="btn" id="btnBackTitle">Back</button>
+      <div class="btns">
+        <button class="btn" id="btnBackTitle">Back</button>
+        <button class="btn red" id="btnShop">🛒 Shop</button>
+      </div>
+    </div>
+    <div class="card hidden" id="screenShop">
+      <h2>🛒 Demolition Supply Co.</h2>
+      <div class="wallet">Company cash: <b class="cashVal">$0</b></div>
+      <div id="shopGrid"></div>
+      <button class="btn" id="btnShopBack">Back to jobs</button>
     </div>
     <div class="card hidden" id="screenResult">
       <h2 id="resTitle">Demolished!</h2>
@@ -79,8 +112,10 @@
       <table id="resTable"></table>
       <div id="resTotal" class="total"></div>
       <div id="resBest" class="best"></div>
+      <div id="resPay" class="pay"></div>
       <div class="btns">
         <button class="btn" id="btnLevels">Levels</button>
+        <button class="btn" id="btnReplay">🎬 Replay</button>
         <button class="btn" id="btnRetry">Retry</button>
         <button class="btn red" id="btnNext">Next job ▶</button>
       </div>
