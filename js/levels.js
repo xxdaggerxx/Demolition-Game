@@ -2,10 +2,12 @@
 // The target building is centred on `x`. The lot is the building footprint plus
 // `lotPad` on each side; between the lot and the neighbours is the street,
 // where cars park and bystanders wander in.
+// `difficulty` (1-5) sets how much a job pays per point; every job is open from the start.
 (function (root) {
   const LEVELS = [
     {
       id: 1,
+      difficulty: 1,
       name: 'First Job',
       blurb: 'A small concrete office block. Cut the ground-floor columns — and shoo away anyone who wanders in!',
       material: 'concrete', bays: 4, floors: 5, bayW: 64, floorH: 58, x: 800, lotPad: 45,
@@ -19,6 +21,7 @@
     },
     {
       id: 2,
+      difficulty: 2,
       name: 'Downtown Tower',
       blurb: 'Taller, with a heavy water tank on the roof. Make it fall straight down — not sideways.',
       material: 'concrete', bays: 4, floors: 9, bayW: 60, floorH: 56, x: 800, lotPad: 35, roof: 'tank',
@@ -32,6 +35,7 @@
     },
     {
       id: 3,
+      difficulty: 2,
       name: 'Old Brick Mill',
       blurb: 'Brick crumbles easily — but that is a 200-year-old church next door. Hits on it cost double!',
       material: 'brick', bays: 5, floors: 5, bayW: 56, floorH: 54, x: 800, lotPad: 35,
@@ -45,6 +49,7 @@
     },
     {
       id: 4,
+      difficulty: 3,
       name: 'The Wide Load',
       blurb: 'A steel-framed warehouse. Steel bends instead of shattering — it needs strength 6+, or cutter charges.',
       material: 'steel', bays: 8, floors: 4, bayW: 62, floorH: 60, x: 800, lotPad: 30,
@@ -58,6 +63,7 @@
     },
     {
       id: 5,
+      difficulty: 4,
       name: 'Glass Office',
       blurb: 'A glass curtain wall. Every blast sprays shards — and there is a billboard on the roof.',
       material: 'glass', bays: 4, floors: 8, bayW: 60, floorH: 56, x: 800, lotPad: 35, roof: 'sign',
@@ -71,6 +77,7 @@
     },
     {
       id: 6,
+      difficulty: 5,
       name: 'The Needle',
       blurb: 'A slender skyscraper hemmed in by towers, with a water tank up top. Sequence your delays!',
       material: 'concrete', bays: 3, floors: 13, bayW: 62, floorH: 54, x: 800, lotPad: 28, roof: 'tank',
@@ -84,6 +91,7 @@
     },
     {
       id: 7,
+      difficulty: 3,
       name: 'Lean on Me',
       blurb: 'DIRECTIONAL JOB: topple this block LEFT into the empty lot. Cut the left side first and leave the right side as a hinge.',
       material: 'concrete', bays: 3, floors: 7, bayW: 60, floorH: 56, x: 920, lotPad: 25,
@@ -98,6 +106,7 @@
     },
     {
       id: 8,
+      difficulty: 3,
       name: 'Timber!',
       blurb: 'DIRECTIONAL JOB: fell this tall brick tower RIGHT, along the empty lot. It is narrow and tall — the hinge matters!',
       material: 'brick', bays: 2, floors: 10, bayW: 46, floorH: 52, x: 560, lotPad: 18,
@@ -113,6 +122,7 @@
     // ---------- World Landmarks: replicas in a theme park that is closing down ----------
     {
       id: 9,
+      difficulty: 4,
       name: 'Clock Tower',
       landmark: '🕰',
       blurb: 'LANDMARK: the theme park’s replica clock tower. Tall, narrow sandstone with a heavy spire — bring it straight down.',
@@ -127,6 +137,7 @@
     },
     {
       id: 10,
+      difficulty: 2,
       name: 'Leaning Tower',
       landmark: '🏛',
       blurb: 'LANDMARK: the replica leaning tower — it is already tilting RIGHT. Finish the job and topple it into the piazza.',
@@ -142,6 +153,7 @@
     },
     {
       id: 11,
+      difficulty: 2,
       name: 'Iron Lattice Tower',
       landmark: '🗼',
       blurb: 'LANDMARK: the park’s replica of the famous iron tower. A wrought-iron lattice — cut the legs on one side and fell it RIGHT across the park.',
@@ -160,6 +172,7 @@
     // ---------- Unusual shapes ----------
     {
       id: 12,
+      difficulty: 4,
       name: 'Deco Spire',
       blurb: 'A stepped art-deco skyscraper. Each setback sits on the floors below — bring the whole wedding cake straight down.',
       material: 'concrete', bays: 6, floors: 12, bayW: 50, floorH: 50, x: 800, lotPad: 40, roof: 'spire', spireH: 110,
@@ -174,6 +187,7 @@
     },
     {
       id: 13,
+      difficulty: 2,
       name: 'Victory Arch',
       blurb: 'A triumphal arch: two stone legs carrying a heavy top. Take out both legs evenly or the top slides off sideways.',
       material: 'sandstone', bays: 4, floors: 6, bayW: 58, floorH: 54, x: 800, lotPad: 45,
@@ -188,6 +202,7 @@
     },
     {
       id: 14,
+      difficulty: 3,
       name: 'Glass Pyramid',
       blurb: 'A stepped glass pyramid. Wide, low and fragile — expect a storm of shards.',
       material: 'glass', bays: 10, floors: 5, bayW: 44, floorH: 52, x: 800, lotPad: 30,
@@ -202,6 +217,7 @@
     },
     {
       id: 15,
+      difficulty: 4,
       name: 'Sky Twins',
       blurb: 'Twin towers joined by a two-storey skybridge. If one tower goes first, the bridge drags the other one over.',
       material: 'concrete', bays: 6, floors: 11, bayW: 48, floorH: 50, x: 800, lotPad: 40,
@@ -217,6 +233,7 @@
     },
     {
       id: 16,
+      difficulty: 2,
       name: 'Sky Needle',
       landmark: '🛸',
       blurb: 'A slender hourglass tower carrying a flying-saucer deck. It is steel (strength 6+) and very top-heavy — drop the saucer straight down.',
@@ -234,6 +251,7 @@
     // ---------- Bridges ----------
     {
       id: 17,
+      difficulty: 3,
       name: 'Old Truss Bridge',
       landmark: '🌉',
       blurb: 'A steel truss bridge on stone piers, anchored at both banks. Drop the whole span into the river — and wave the boats away first!',
@@ -249,6 +267,7 @@
     },
     {
       id: 18,
+      difficulty: 2,
       name: 'Stone Viaduct',
       landmark: '🌉',
       blurb: 'An old stone railway viaduct striding across the river. Every pier counts — and mind the boats.',

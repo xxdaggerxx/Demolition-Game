@@ -31,7 +31,10 @@
   const BASE_DELAYS = [0, 0.25, 0.5, 1, 1.5, 2];
   const FINE_DELAYS = [0, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3];
   const START_CASH = 1000;
-  const PAY_PER_POINT = 5;
+  // Harder jobs pay more: dollars per point, by difficulty 1-5.
+  const PAY_RATE = [0, 4, 5, 6.5, 8, 10];
+  const DIFF_NAME = ['', 'Easy', 'Moderate', 'Tricky', 'Hard', 'Expert'];
+  const payRate = (L) => PAY_RATE[L.difficulty || 1];
   const REPLAY_PAY_FRACTION = 0.3;
 
   const STORE_KEY = 'implode-progress-v2';
@@ -83,12 +86,11 @@
       const b = document.createElement('button');
       b.className = 'lvl';
       const best = progress.best[L.id];
-      const locked = i + 1 > progress.unlocked;
-      b.disabled = locked;
+      const d = L.difficulty || 1;
       const stars = best ? '★'.repeat(best.stars) + '☆'.repeat(3 - best.stars) : '☆☆☆';
       const mat = P.MATERIALS[L.material || 'concrete'].name;
-      b.innerHTML = `<span class="n">Job ${L.id}${locked ? ' 🔒' : ''} · ${mat}${L.topple ? ' · ↔' : ''}${L.landmark ? ' · ' + L.landmark : ''}</span><span class="t">${L.name}</span>
-        <span class="s">${stars}</span><br><span class="b">${best ? 'Best: ' + best.score + ' · ' : ''}Budget ${money(L.budget)}</span>`;
+      b.innerHTML = `<span class="n">Job ${L.id} · ${mat}${L.topple ? ' · ↔' : ''}${L.landmark ? ' · ' + L.landmark : ''}</span><span class="t">${L.name}</span>
+        <span class="s">${stars}</span><br><span class="d d${d}">${'●'.repeat(d)}${'○'.repeat(5 - d)} ${DIFF_NAME[d]}</span><br><span class="p">💰 ${money(payRate(L) * 1000)} / 1,000 pts</span><br><span class="b">${best ? 'Best: ' + best.score + ' · ' : ''}Budget ${money(L.budget)}</span>`;
       b.onclick = () => { audio.click(); startLevel(i); };
       grid.appendChild(b);
     });
@@ -338,21 +340,20 @@
     let bestMsg = prev ? `Best: ${prev.score}` : '';
     let pay = 0;
     if (ev.success) {
-      pay = Math.round((total * PAY_PER_POINT * (prev ? REPLAY_PAY_FRACTION : 1)) / 10) * 10;
+      pay = Math.round((total * payRate(L) * (prev ? REPLAY_PAY_FRACTION : 1)) / 10) * 10;
       if (!prev || total > prev.score) {
         progress.best[L.id] = { score: total, stars: Math.max(ev.stars, prev ? prev.stars : 0) };
         bestMsg = prev ? 'New best score!' : '';
       } else if (ev.stars > prev.stars) prev.stars = ev.stars;
-      progress.unlocked = Math.max(progress.unlocked, Math.min(LEVELS.length, state.levelIndex + 2));
       progress.cash += pay;
       saveProgress();
     }
     $('resBest').textContent = bestMsg;
     $('resPay').textContent = ev.success
-      ? `💰 Payout: ${money(pay)}${prev ? ' (repeat job, 30%)' : ''} · Company cash: ${money(progress.cash)}`
+      ? `💰 Payout: ${money(pay)} (${DIFF_NAME[L.difficulty || 1]} job${prev ? ', repeat 30%' : ''}) · Company cash: ${money(progress.cash)}`
       : `No payout · Company cash: ${money(progress.cash)}`;
     const hasNext = state.levelIndex + 1 < LEVELS.length;
-    $('btnNext').classList.toggle('hidden', !(ev.success && hasNext));
+    $('btnNext').classList.toggle('hidden', !hasNext);
     $('btnReplay').classList.toggle('hidden', !state.rec || state.rec.frames.length < 2);
     if (pay) setTimeout(() => audio.cash(), 900);
     setTimeout(() => { if (state.phase === 'result') showScreen('screenResult'); }, 600);

@@ -34,8 +34,10 @@ There is no build step. Either:
 - Every job has a **budget**. Each charge costs money: dynamite is $150 + $40 per strength
   level, shaped charges cost 60% more, and cutter charges are a flat $450. Unspent budget
   earns bonus points.
-- A successful job pays **5 × your score** into your company cash. Repeating a job you've
-  already cleared pays 30%.
+- **Every job is open from the start.** Each has a difficulty from Easy to Expert, and
+  harder jobs pay more: $4, $5, $6.50, $8 or $10 per point of score.
+- A successful job pays that rate × your score into your company cash. Repeating a job
+  you've already cleared pays 30%.
 - Spend the cash in the **🛒 shop**:
 
 | Item | Price | Effect |

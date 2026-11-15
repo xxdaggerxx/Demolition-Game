@@ -176,3 +176,7 @@ button { font-family: inherit; cursor: pointer; }
 .ticker .tk { overflow: hidden; flex: 1; position: relative; }
 #tickerText { display: inline-block; white-space: nowrap; color: #ffd23f; font-weight: 700; font-size: 14px; padding: 6px 0 6px 100%; animation: ticker linear infinite; }
 @keyframes ticker { to { transform: translateX(-100%); } }
+
+.lvl .d { font-size: 11px; font-weight: 800; letter-spacing: 0.5px; }
+.lvl .d1 { color: #2a8a2a; } .lvl .d2 { color: #5a8a1a; } .lvl .d3 { color: #c98a00; } .lvl .d4 { color: #d6601a; } .lvl .d5 { color: #d62828; }
+.lvl .p { font-size: 12px; font-weight: 800; color: #2a8a2a; }
