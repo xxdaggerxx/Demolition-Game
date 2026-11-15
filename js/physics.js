@@ -46,6 +46,16 @@
       density: { column: 0.0026, slab: 0.0026 },
       blast: { pieces: [1, 2], scale: [0.92, 0.05] }, crush: { pieces: [1, 2], scale: [0.92, 0.05] },
     },
+    whitesteel: {
+      name: 'Steel', colTough: 6, slabTough: 6, breakDist: 6, stiffness: 0.9,
+      density: { column: 0.0026, slab: 0.0026 },
+      blast: { pieces: [1, 2], scale: [0.92, 0.05] }, crush: { pieces: [1, 2], scale: [0.92, 0.05] },
+    },
+    redsteel: {
+      name: 'Steel', colTough: 6, slabTough: 6, breakDist: 6, stiffness: 0.9,
+      density: { column: 0.0026, slab: 0.0026 },
+      blast: { pieces: [1, 2], scale: [0.92, 0.05] }, crush: { pieces: [1, 2], scale: [0.92, 0.05] },
+    },
     glass: {
       name: 'Glass', colTough: 3, slabTough: 4, breakDist: 4.5, stiffness: 0.95, glassWalls: true,
       density: { column: 0.0030, slab: 0.0032 },
@@ -59,6 +69,8 @@
     wall: { density: 0.0012, friction: 0.8, frictionStatic: 1.0, restitution: 0.03, toughness: 1, breakDist: 3.5 },
     frag: { density: 0.0025, friction: 0.9, frictionStatic: 1.0, restitution: 0.05 },
     tank: { density: 0.0040, friction: 0.8, frictionStatic: 1.0, restitution: 0.02, toughness: 3 },
+    saucer: { density: 0.0016, friction: 0.8, frictionStatic: 1.0, restitution: 0.02, toughness: 5 },
+    needle: { density: 0.0010, friction: 0.8, frictionStatic: 1.0, restitution: 0.02, toughness: 2 },
     spire: { density: 0.0008, friction: 0.8, frictionStatic: 1.0, restitution: 0.02, toughness: 3 },
     belfry: { density: 0.0030, friction: 0.8, frictionStatic: 1.0, restitution: 0.02, toughness: 3 },
     beam: { density: 0.0026, friction: 0.8, frictionStatic: 1.0, restitution: 0.03, toughness: 6 },
@@ -187,6 +199,11 @@
   function buildTarget(sim) {
     if (sim.level.structure === 'truss') return buildTruss(sim);
     const L = sim.level;
+    // profile[f] lists the bay ranges [from, to) that exist on floor f, so buildings
+    // can step back, split into towers or bridge a gap. Default: every bay.
+    const prof = (f) => (L.profile ? L.profile[f] : [[0, L.bays]]);
+    const bayIn = (f, j) => f >= 0 && f < L.floors && prof(f).some(([a, b]) => j >= a && j < b);
+    const lineIn = (f, i) => prof(f).some(([a, b]) => i >= a && i <= b);
     const mat = sim.mat;
     const B = L.bays, F = L.floors, bw = L.bayW, fh = L.floorH;
     const colH = fh - SLAB_H;
@@ -204,21 +221,28 @@
       cols[f] = [];
       for (let i = 0; i <= B; i++) {
         const x = left + i * bw;
-        cols[f][i] = makePiece(sim, 'column', x, base - colH / 2, COL_W, colH, { floor: f, line: i }, colOver);
+        // a column needs a floor (or the ground) to stand on
+        const footing = f === 0 || bayIn(f - 1, i - 1) || bayIn(f - 1, i);
+        cols[f][i] = lineIn(f, i) && footing
+          ? makePiece(sim, 'column', x, base - colH / 2, COL_W, colH, { floor: f, line: i }, colOver) : null;
       }
       slabs[f] = [];
       const sy = base - colH - SLAB_H / 2;
       for (let j = 0; j < B; j++) {
-        const x0 = left + j * bw - (j === 0 ? COL_W / 2 : 0);
-        const x1 = left + (j + 1) * bw + (j === B - 1 ? COL_W / 2 : 0);
-        slabs[f][j] = makePiece(sim, 'slab', (x0 + x1) / 2, sy, x1 - x0, SLAB_H, { floor: f, bay: j, x0, x1 }, slabOver);
+        if (!bayIn(f, j)) { slabs[f][j] = null; continue; }
+        const x0 = left + j * bw - (!bayIn(f, j - 1) ? COL_W / 2 : 0);
+        const x1 = left + (j + 1) * bw + (!bayIn(f, j + 1) ? COL_W / 2 : 0);
+        slabs[f][j] = makePiece(sim, 'slab', (x0 + x1) / 2, sy, x1 - x0, SLAB_H,
+          { floor: f, bay: j, x0, x1, archUnder: !!L.arches && f === F - 1 }, slabOver);
       }
       walls[f] = [];
       for (let j = 0; j < B; j++) {
+        // cladding needs a floor under it (so a skybridge or arch has an open underside)
+        if (!bayIn(f, j) || L.noWalls || (f > 0 && !bayIn(f - 1, j))) { walls[f][j] = null; continue; }
         const x0 = left + j * bw + COL_W / 2 + 0.5;
         const x1 = left + (j + 1) * bw - COL_W / 2 - 0.5;
         const ww = x1 - x0, wh = colH - 3;
-        const isLobby = f === 0 && (j === Math.floor(B / 2) || (B % 2 === 0 && j === B / 2 - 1));
+        const isLobby = !L.profile && f === 0 && (j === Math.floor(B / 2) || (B % 2 === 0 && j === B / 2 - 1));
         walls[f][j] = makePiece(sim, 'wall', (x0 + x1) / 2, base - colH / 2 - 1.5, ww, wh, {
           floor: f, bay: j, lobby: isLobby, style: (f + j) % 3, glass: !!mat.glassWalls,
         });
@@ -226,7 +250,7 @@
     }
 
     const slabAt = (f, x) => {
-      for (const s of slabs[f]) if (x >= s.plugin.piece.x0 - 0.01 && x <= s.plugin.piece.x1 + 0.01) return s;
+      for (const s of slabs[f]) if (s && x >= s.plugin.piece.x0 - 0.01 && x <= s.plugin.piece.x1 + 0.01) return s;
       return null;
     };
     const cBreak = mat.breakDist, stiff = mat.stiffness;
@@ -235,6 +259,7 @@
       const topY = base - colH;
       for (let i = 0; i <= B; i++) {
         const col = cols[f][i];
+        if (!col) continue;
         const x = col.position.x;
         for (const dx of [-COL_W / 2 + 1.5, COL_W / 2 - 1.5]) {
           const s = slabAt(f, x + dx);
@@ -250,12 +275,14 @@
       }
       for (let j = 0; j < B - 1; j++) {
         const a = slabs[f][j], b = slabs[f][j + 1];
+        if (!a || !b) continue;
         const x = a.plugin.piece.x1;
         const sy = topY - SLAB_H / 2;
         weld(sim, a, b, [{ x, y: sy - SLAB_H / 2 + 1.5 }, { x, y: sy + SLAB_H / 2 - 1.5 }], cBreak, stiff);
       }
       for (let j = 0; j < B; j++) {
         const w = walls[f][j];
+        if (!w) continue;
         const pc = w.plugin.piece;
         const x0 = w.position.x - pc.w / 2 + 3, x1 = w.position.x + pc.w / 2 - 3;
         weld(sim, w, slabs[f][j], [{ x: x0, y: topY }, { x: x1, y: topY }], BASE.wall.breakDist);
@@ -272,12 +299,15 @@
       }
       return body;
     };
-    if (L.roof === 'tank') addRoof('tank', 40, 46, left + bw);
-    if (L.roof === 'sign') addRoof('sign', Math.min(B * bw - 20, 110), 40, L.x);
-    if (L.roof === 'spire') addRoof('spire', B * bw + COL_W - 6, 96, L.x);
-    if (L.roof === 'belfry') addRoof('belfry', B * bw - 14, 40, L.x);
+    const [t0, t1] = prof(F - 1)[0];
+    const roofW = (t1 - t0) * bw, roofX = left + ((t0 + t1) / 2) * bw;
+    if (L.roof === 'tank') addRoof('tank', 40, 46, left + t0 * bw + bw);
+    if (L.roof === 'sign') addRoof('sign', Math.min(roofW - 20, 110), 40, roofX);
+    if (L.roof === 'spire') addRoof('spire', roofW + COL_W - 6, L.spireH || 96, roofX);
+    if (L.roof === 'belfry') addRoof('belfry', roofW - 14, 40, roofX);
+    if (L.profile || L.noWalls) sim.noXray = true;
     // clock faces near the top of a clock tower
-    if (L.clockFloor != null) for (const w of walls[L.clockFloor]) w.plugin.piece.clock = true;
+    if (L.clockFloor != null) for (const w of walls[L.clockFloor]) if (w) w.plugin.piece.clock = true;
     if (L.lean) applyLean(sim, L.lean);
 
     sim.cols = cols; sim.slabs = slabs; sim.walls = walls;
@@ -308,27 +338,21 @@
   // collision group so the overlapping ends at each node don't fight; once a
   // member has torn completely free it rejoins normal collisions as rubble.
   const TRUSS_GROUP = -7;
-  function buildTruss(sim) {
-    const L = sim.level;
+  function trussKit(sim) {
     const gy = WORLD.groundY;
-    const H = L.height, base = L.baseHalf, cx = L.x;
-    const hw = (h) => L.topHalf + (base - L.topHalf) * Math.pow(1 - h / H, 2.1);
-    const levels = L.trussLevels;
-    const lefts = levels.map((h) => ({ x: cx - hw(h), y: gy - h }));
-    const rights = levels.map((h) => ({ x: cx + hw(h), y: gy - h }));
-    const apex = { x: cx, y: gy - H };
     const nodeOwner = new Map(); // node key -> primary member
+    const anchors = new Set(); // node keys welded to the world (abutments)
     const key = (p) => `${Math.round(p.x)}:${Math.round(p.y)}`;
     let idx = 0;
-    const T = 7;
     const member = (a, b, extra) => {
+      extra = extra || {};
       const len = Vector.magnitude(Vector.sub(b, a));
       const mid = Vector.mult(Vector.add(a, b), 0.5);
       const ang = Math.atan2(b.y - a.y, b.x - a.x);
-      const thick = (extra && extra.thick) || T;
-      const over = (extra && extra.over) || 0;
-      const body = makePiece(sim, 'beam', mid.x, mid.y, len + over * 2, thick, Object.assign({ truss: true, idx: idx++, floor: 0 }, extra || {}),
-        { density: sim.mat.density.column, toughness: sim.mat.colTough });
+      const thick = extra.thick || 7;
+      const over = extra.over || 0;
+      const body = makePiece(sim, 'beam', mid.x, mid.y, len + over * 2, thick, Object.assign({ truss: true, idx: idx++, floor: 0 }, extra),
+        { density: extra.density || sim.mat.density.column, toughness: extra.tough || sim.mat.colTough });
       Body.setAngle(body, ang);
       body.collisionFilter.group = TRUSS_GROUP;
       body.plugin.piece.y0 = body.position.y;
@@ -337,12 +361,46 @@
       for (const [p, dir] of [[a, 1], [b, -1]]) {
         const k = key(p);
         const pts = [p, Vector.add(p, Vector.mult(u, 4 * dir))];
-        if (p.y >= gy - 0.5) weld(sim, body, null, pts, sim.mat.breakDist, sim.mat.stiffness);
-        else if (nodeOwner.has(k)) weld(sim, body, nodeOwner.get(k), pts, sim.mat.breakDist, sim.mat.stiffness);
+        if (p.y >= gy - 0.5 || anchors.has(k)) weld(sim, body, null, pts, sim.mat.breakDist, sim.mat.stiffness);
+        if (p.y >= gy - 0.5) continue;
+        if (nodeOwner.has(k)) weld(sim, body, nodeOwner.get(k), pts, sim.mat.breakDist, sim.mat.stiffness);
         else nodeOwner.set(k, body);
       }
       return body;
     };
+    // a solid block (e.g. an observation deck) carried by the lattice
+    const block = (kind, x, y, w, h, onto, pts, extra) => {
+      const body = makePiece(sim, kind, x, y, w, h, Object.assign({ truss: true, idx: idx++, floor: 0, roof: true }, extra || {}));
+      body.collisionFilter.group = TRUSS_GROUP;
+      weld(sim, body, onto, pts, sim.mat.breakDist, sim.mat.stiffness);
+      return body;
+    };
+    const finish = (left, right, height) => {
+      sim.building = { left, right, height, top: gy - height };
+      sim.cols = []; sim.slabs = []; sim.walls = [];
+      sim.truss = true;
+      sim.totalMass = sim.pieces.reduce((m, p) => m + p.mass, 0);
+      sim.comX0 = sim.pieces.reduce((m, p) => m + p.mass * p.position.x, 0) / sim.totalMass;
+    };
+    return { member, block, finish, anchors, key, gy };
+  }
+
+  function buildTruss(sim) {
+    const shape = sim.level.shape || 'tower';
+    if (shape === 'needle') return buildNeedle(sim);
+    if (shape === 'bridge') return buildBridge(sim);
+    return buildLatticeTower(sim);
+  }
+
+  function buildLatticeTower(sim) {
+    const L = sim.level;
+    const { member, finish, gy } = trussKit(sim);
+    const H = L.height, base = L.baseHalf, cx = L.x;
+    const hw = (h) => L.topHalf + (base - L.topHalf) * Math.pow(1 - h / H, 2.1);
+    const levels = L.trussLevels;
+    const lefts = levels.map((h) => ({ x: cx - hw(h), y: gy - h }));
+    const rights = levels.map((h) => ({ x: cx + hw(h), y: gy - h }));
+    const apex = { x: cx, y: gy - H };
     const n = levels.length;
     for (let k = 0; k < n - 1; k++) {
       member(lefts[k], lefts[k + 1], { leg: true, floor: k });
@@ -358,13 +416,70 @@
       if (k % 2) member(lefts[k], rights[k + 1], { floor: k, diag: true, thick: 5 });
       else member(rights[k], lefts[k + 1], { floor: k, diag: true, thick: 5 });
     }
-    // flagpole on top
     member(apex, { x: cx, y: gy - H - 46 }, { floor: n, thick: 4, mast: true });
-    sim.building = { left: cx - base, right: cx + base, height: H, top: gy - H };
-    sim.cols = []; sim.slabs = []; sim.walls = [];
-    sim.truss = true;
-    sim.totalMass = sim.pieces.reduce((s, b) => s + b.mass, 0);
-    sim.comX0 = sim.pieces.reduce((s, b) => s + b.mass * b.position.x, 0) / sim.totalMass;
+    finish(cx - base, cx + base, H);
+  }
+
+  // An hourglass tower carrying a wide flying-saucer deck (a "space needle").
+  function buildNeedle(sim) {
+    const L = sim.level;
+    const { member, block, finish, gy } = trussKit(sim);
+    const cx = L.x, H = L.height;
+    const levels = L.trussLevels; // heights; half-widths pinch to a waist then flare
+    const hw = (h) => {
+      const t = h / H;
+      return t < L.waistAt ? L.baseHalf + (L.waistHalf - L.baseHalf) * Math.pow(t / L.waistAt, 0.75)
+        : L.waistHalf + (L.topHalf - L.waistHalf) * Math.pow((t - L.waistAt) / (1 - L.waistAt), 1.6);
+    };
+    const lefts = levels.map((h) => ({ x: cx - hw(h), y: gy - h }));
+    const rights = levels.map((h) => ({ x: cx + hw(h), y: gy - h }));
+    const n = levels.length;
+    for (let k = 0; k < n - 1; k++) {
+      member(lefts[k], lefts[k + 1], { leg: true, floor: k });
+      member(rights[k], rights[k + 1], { leg: true, floor: k });
+    }
+    let top = null;
+    for (let k = 1; k < n; k++) top = member(lefts[k], rights[k], { floor: k, thick: 6 });
+    for (let k = 1; k < n - 1; k++) {
+      if (k % 2) member(lefts[k], rights[k + 1], { floor: k, diag: true, thick: 4 });
+      else member(rights[k], lefts[k + 1], { floor: k, diag: true, thick: 4 });
+    }
+    const sw = L.saucerW, sh = 30, sy = gy - H - sh / 2 - 3;
+    const saucer = block('saucer', cx, sy, sw, sh, top, [{ x: cx - L.topHalf, y: gy - H - 3 }, { x: cx + L.topHalf, y: gy - H - 3 }]);
+    block('needle', cx, sy - sh / 2 - 36, 5, 72, saucer, [{ x: cx, y: sy - sh / 2 }, { x: cx, y: sy - sh / 2 - 5 }]);
+    finish(cx - sw / 2, cx + sw / 2, H + sh);
+  }
+
+  // A through-truss bridge on two stone piers, anchored to abutments at each bank.
+  function buildBridge(sim) {
+    const L = sim.level;
+    const { member, finish, anchors, key, gy } = trussKit(sim);
+    const n = L.panels, pw = L.span / n, x0 = L.x - L.span / 2;
+    const dy = gy - L.deckH, ty = dy - L.trussH;
+    const B = [], T = [];
+    for (let i = 0; i <= n; i++) { B.push({ x: x0 + i * pw, y: dy }); T.push({ x: x0 + i * pw, y: ty }); }
+    anchors.add(key(B[0])); anchors.add(key(B[n]));
+    for (let i = 0; i < n; i++) member(B[i], B[i + 1], { floor: 1, deck: true, road: true, thick: 9 });
+    for (const i of L.piers) member({ x: B[i].x, y: gy }, B[i], { floor: 0, pier: true, thick: 18, tough: 3, density: 0.0034, rubble: { pieces: [2, 5], scale: [0.5, 0.25] } });
+    member(B[0], T[1], { floor: 2, diag: true, thick: 6 });
+    member(T[n - 1], B[n], { floor: 2, diag: true, thick: 6 });
+    for (let i = 1; i < n - 1; i++) member(T[i], T[i + 1], { floor: 2, thick: 6 });
+    for (let i = 1; i < n; i++) member(B[i], T[i], { floor: 2, thick: 4 });
+    for (let i = 1; i < n - 1; i++) {
+      if (i < n / 2) member(T[i], B[i + 1], { floor: 2, diag: true, thick: 4 });
+      else member(B[i], T[i + 1], { floor: 2, diag: true, thick: 4 });
+    }
+    // solid abutments on each bank: scenery that debris can land on
+    sim.abutments = [];
+    for (const side of [-1, 1]) {
+      const w = 70, x = L.x + side * (L.span / 2 + w / 2 + 12);
+      const body = Bodies.rectangle(x, gy - L.deckH / 2 + 5, w, L.deckH + 10, {
+        isStatic: true, label: 'ground', friction: 0.15, collisionFilter: { category: CAT.ground, mask: 0xffff },
+      });
+      Composite.add(sim.world, body);
+      sim.abutments.push({ x, w, h: L.deckH + 10, side });
+    }
+    finish(x0, x0 + L.span, L.deckH + L.trussH);
   }
 
   function releaseFreeTrussMembers(sim) {
@@ -430,7 +545,7 @@
   function pieceAt(sim, p) {
     const found = Query.point(sim.pieces.filter((b) => b.plugin.piece.kind !== 'frag'), p);
     if (!found.length) return null;
-    const order = { column: 0, beam: 0, slab: 1, tank: 2, sign: 2, spire: 2, belfry: 2, wall: 3 };
+    const order = { column: 0, beam: 0, slab: 1, tank: 2, sign: 2, spire: 2, belfry: 2, saucer: 2, needle: 2, wall: 3 };
     found.sort((a, b) => order[a.plugin.piece.kind] - order[b.plugin.piece.kind]);
     return found[0];
   }
@@ -487,8 +602,8 @@
     const pc = body.plugin.piece;
     removePiece(sim, body);
     if (mode === 'cut') return cutMember(sim, body);
-    let spec = mode === 'crush' ? sim.mat.crush : sim.mat.blast;
-    if (pc.kind === 'tank' || pc.kind === 'sign' || pc.kind === 'spire' || pc.kind === 'belfry') spec = { pieces: [1, 2], scale: [0.95, 0.03] };
+    let spec = pc.rubble || (mode === 'crush' ? sim.mat.crush : sim.mat.blast);
+    if (['tank', 'sign', 'spire', 'belfry', 'saucer', 'needle'].includes(pc.kind)) spec = { pieces: [1, 2], scale: [0.95, 0.03] };
     const [short, long] = spec.pieces;
     const nx = pc.w > pc.h ? long : short;
     const ny = pc.w > pc.h ? 1 : long;
@@ -500,7 +615,7 @@
         const wp = Vector.add(body.position, Vector.rotate({ x: lx, y: ly }, body.angle));
         const s = spec.scale[0] + sim.rand() * spec.scale[1];
         const w = Math.max(3, fw * s), h = Math.max(3, fh * s);
-        const f = makePiece(sim, 'frag', wp.x, wp.y, w, h, { parentKind: pc.kind, shade: pc.shade });
+        const f = makePiece(sim, 'frag', wp.x, wp.y, w, h, { parentKind: pc.kind, shade: pc.shade, stone: !!pc.pier });
         Body.setAngle(f, body.angle + (sim.rand() - 0.5) * (mode === 'cut' ? 0.1 : 0.6));
         Body.setVelocity(f, body.velocity);
         frags.push(f);
@@ -616,19 +731,31 @@
 
   // ---------- Bystanders ----------
   const SHIRTS = ['#ef476f', '#118ab2', '#06d6a0', '#ffd166', '#8338ec', '#f77f00', '#3a86ff'];
+  const WATER_DEPTH = 26;
+  // Where bystanders roam: the street between the neighbours, or (as boats) the river.
+  function peopleZone(sim) {
+    const w = sim.level.water;
+    return w ? { left: w[0], right: w[1], boat: true } : sim.zone;
+  }
+
   function spawnPerson(sim) {
     const side = sim.rand() < 0.5 ? -1 : 1;
-    const z = sim.zone;
-    const x = side < 0 ? z.left - 120 - sim.rand() * 80 : z.right + 120 + sim.rand() * 80;
-    const target = z.left + 12 + sim.rand() * (z.right - z.left - 24);
+    const z = peopleZone(sim);
+    const x = z.boat ? (side < 0 ? z.left + 14 : z.right - 14)
+      : side < 0 ? z.left - 120 - sim.rand() * 80 : z.right + 120 + sim.rand() * 80;
+    const m = z.boat ? 70 : 12;
+    const target = z.left + m + sim.rand() * (z.right - z.left - m * 2);
     sim.people.push({
-      id: sim.nextPersonId++, x, y: WORLD.groundY, dir: -side, speed: 24 + sim.rand() * 14, state: 'walk', target,
+      boat: !!z.boat,
+      id: sim.nextPersonId++, x, y: WORLD.groundY - (z.boat ? WATER_DEPTH : 0), dir: -side,
+      speed: z.boat ? 20 + sim.rand() * 8 : 24 + sim.rand() * 14, state: 'walk', target,
       shirt: SHIRTS[Math.floor(sim.rand() * SHIRTS.length)], skin: ['#f1c27d', '#c68642', '#8d5524', '#ffdbac'][Math.floor(sim.rand() * 4)],
       hat: sim.rand() < 0.35, anim: sim.rand() * 10, say: 0,
     });
   }
 
-  function inZone(sim, p) { return p.x > sim.zone.left - 4 && p.x < sim.zone.right + 4; }
+  // Boats enter at the river's edge, so they only count once they are well into the channel.
+  function inZone(sim, p) { const z = peopleZone(sim), m = z.boat ? -60 : 4; return p.x > z.left - m && p.x < z.right + m; }
 
   // Advances bystanders by dt seconds. spawn = whether new ones may wander in.
   function updatePeople(sim, dt, spawn) {
@@ -650,9 +777,10 @@
         p.anim += dt * p.speed * 0.25;
         if (Math.abs(p.target - p.x) < 2) { p.state = 'watch'; p.say = 2.5; p.dir = Math.sign(sim.level.x - p.x) || 1; }
       } else if (p.state === 'shoo' || p.state === 'panic') {
-        p.x += p.dir * (p.state === 'panic' ? 150 : 110) * dt;
+        p.x += p.dir * (p.boat ? (p.state === 'panic' ? 120 : 85) : p.state === 'panic' ? 150 : 110) * dt;
         p.anim += dt * 30;
-        if (p.x < sim.zone.left - 400 || p.x > sim.zone.right + 400) sim.people.splice(i, 1);
+        const z = peopleZone(sim), out = p.boat ? -6 : 400;
+        if (p.x < z.left - out || p.x > z.right + out) sim.people.splice(i, 1);
       }
     }
   }
@@ -670,7 +798,8 @@
 
   function shoo(sim, p) {
     p.state = 'shoo';
-    p.dir = p.x < (sim.zone.left + sim.zone.right) / 2 ? -1 : 1;
+    const z = peopleZone(sim);
+    p.dir = p.x < (z.left + z.right) / 2 ? -1 : 1;
     p.say = 1.2;
   }
 
@@ -681,7 +810,8 @@
     for (const p of sim.people) {
       if (!inZone(sim, p)) continue;
       p.state = 'panic';
-      p.dir = p.x < (sim.zone.left + sim.zone.right) / 2 ? -1 : 1;
+      const z = peopleZone(sim);
+      p.dir = p.x < (z.left + z.right) / 2 ? -1 : 1;
       p.say = 2;
       sim.bystanders++;
       sim.bystanderPen += BYSTANDER_PENALTY;
@@ -720,7 +850,7 @@
     const pc = col.plugin.piece;
     for (let f = 0; f < pc.floor; f++) {
       const c = sim.cols[f][pc.line];
-      if (!c.plugin.piece.destroyed) return false;
+      if (c && !c.plugin.piece.destroyed) return false;
     }
     return true;
   }
@@ -742,6 +872,7 @@
     // Cladding tears off once its floor has dropped.
     for (const row of sim.walls) {
       for (const w of row) {
+        if (!w) continue;
         const pc = w.plugin.piece;
         const dropped = w.position.y - pc.y0;
         const grounded = dropped > 1 && w.bounds.max.y > WORLD.groundY - 0.5;
@@ -755,6 +886,7 @@
     const fh = sim.level.floorH;
     for (const row of sim.cols) {
       for (const b of row) {
+        if (!b) continue;
         const pc = b.plugin.piece;
         if (pc.destroyed) continue;
         const dropped = b.position.y - pc.y0;
@@ -877,7 +1009,7 @@
     rec.frames.push({
       t: sim.time,
       data,
-      people: sim.people.map((p) => ({ x: p.x, y: p.y, state: p.state, dir: p.dir, anim: p.anim, say: p.say, shirt: p.shirt, skin: p.skin, hat: p.hat })),
+      people: sim.people.map((p) => ({ x: p.x, y: p.y, state: p.state, dir: p.dir, anim: p.anim, say: p.say, shirt: p.shirt, skin: p.skin, hat: p.hat, boat: p.boat })),
       nb: sim.neighbors.map((n) => [n.cracks.length, n.flash]),
       cars: sim.cars.map((c) => c.plugin.car.damage),
     });
@@ -892,7 +1024,7 @@
   // ---------- Scenes: what the renderer draws (live or from a replay frame) ----------
   function liveScene(sim) {
     return {
-      level: sim.level, lot: sim.lot, zone: sim.zone, building: sim.building, netting: sim.netting, dropZone: sim.dropZone,
+      level: sim.level, lot: sim.lot, zone: sim.zone, building: sim.building, netting: sim.netting, dropZone: sim.dropZone, abutments: sim.abutments,
       pieces: sim.pieces,
       cars: sim.cars.map((c) => ({ position: c.position, angle: c.angle, car: c.plugin.car, damage: c.plugin.car.damage })),
       people: sim.people,
@@ -927,7 +1059,7 @@
     }
     const neighbors = sim.neighbors.map((n, i) => Object.assign({}, n, { cracks: n.cracks.slice(0, fr.nb[i][0]), flash: fr.nb[i][1] }));
     return {
-      level: sim.level, lot: sim.lot, zone: sim.zone, building: sim.building, netting: sim.netting, dropZone: sim.dropZone,
+      level: sim.level, lot: sim.lot, zone: sim.zone, building: sim.building, netting: sim.netting, dropZone: sim.dropZone, abutments: sim.abutments,
       pieces, cars, people: fr.people, neighbors, charges, t: fr.t,
     };
   }
@@ -941,7 +1073,7 @@
   }
 
   function loadMap(sim) {
-    if (sim.truss) return new Map();
+    if (sim.truss || sim.noXray) return new Map();
     const L = sim.level, B = L.bays, F = L.floors, bw = L.bayW;
     const share = (i) => ((i === 0 || i === B) ? 0.5 : 1) * bw;
     // weight per unit width of one floor (slabs + cladding) and per column
@@ -1057,7 +1189,7 @@
   }
 
   const API = {
-    WORLD, COL_W, SLAB_H, MATERIALS, CHARGE_TYPES, NETTING_COST, BYSTANDER_PENALTY,
+    WORLD, COL_W, SLAB_H, WATER_DEPTH, MATERIALS, CHARGE_TYPES, NETTING_COST, BYSTANDER_PENALTY,
     createSim, step, allowSleep, pieceAt, addCharge, chargePos, chargeCost, spent, detonate, evaluate, kineticLevel,
     updatePeople, personAt, shoo, shooAll, bystandersAtBlast, peopleInZone,
     startRecording, stopRecording, liveScene, frameScene, loadMap,

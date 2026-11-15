@@ -84,6 +84,28 @@ others at shared nodes, and a girder only collides with other members once it ha
 completely free. The leaning tower is a normal frame tilted about its base before the game
 starts.
 
+### Unusual shapes and bridges
+
+Jobs 12–18 break away from the plain rectangular block:
+
+- **Deco Spire:** a stepped art-deco skyscraper with setbacks and a spire.
+- **Victory Arch:** two stone legs carrying a heavy top. Cut only one leg and it stays up.
+- **Glass Pyramid:** a wide stepped pyramid of glass.
+- **Sky Twins:** twin towers joined by a skybridge, which drags one tower over if the other
+  goes first.
+- **🛸 Sky Needle:** an hourglass steel lattice carrying a flying-saucer deck.
+- **🌉 Old Truss Bridge:** a steel truss on two stone piers, anchored to an abutment on each
+  bank. Cutting the piers alone isn't enough; the ends have to be cut free too.
+- **🌉 Stone Viaduct:** a row of stone arches across a river.
+
+On the two river jobs, bystanders arrive as **boats**. Tap them (or use the megaphone) to
+send them out of the channel before you detonate.
+
+Two builders make these possible. A level can give a `profile`, listing which bays exist on
+each floor, so a frame can step back, split into towers or span a gap. The truss builder
+now takes a `shape` (`tower`, `needle` or `bridge`) and can anchor nodes to the world and
+carry solid blocks such as the saucer.
+
 ### News ticker
 
 The results screen opens with a scrolling **BREAKING NEWS** ticker. Its headlines are
@@ -136,7 +158,7 @@ audio files.
 ```
 index.html        UI shell (HUD, toolbar, menus)
 css/style.css     styling
-js/levels.js      the eleven demolition jobs, including the landmarks
+js/levels.js      the eighteen demolition jobs
 js/physics.js     building materials, explosives, collapse, cars, bystanders, replay
                   recording and scoring (also runs in Node)
 js/render.js      canvas renderer, particles, dust and camera shake

@@ -86,11 +86,15 @@
     setLevel(level) {
       if (!level) { this.view = null; this.resize(); return; }
       const ns = level.neighbors;
-      const bw = level.structure === 'truss' ? level.baseHalf * 2 : level.bays * level.bayW;
+      const bw = level.shape === 'bridge' ? level.span + 170 : level.shape === 'needle' ? level.saucerW
+        : level.structure === 'truss' ? level.baseHalf * 2 : level.bays * level.bayW;
+      const th = level.shape === 'bridge' ? level.deckH + level.trussH + 40 : level.shape === 'needle' ? level.height + 120
+        : level.structure === 'truss' ? level.height + 50
+          : level.floors * level.floorH + (level.roof === 'spire' ? (level.spireH || 96) + 4 : level.roof ? 50 : 0);
       let x0 = Math.min(level.x - bw / 2, ...ns.map((n) => n.x - n.w / 2)) - 70;
       let x1 = Math.max(level.x + bw / 2, ...ns.map((n) => n.x + n.w / 2)) + 70;
       if (level.dropZone) { x0 = Math.min(x0, level.dropZone[0] - 70); x1 = Math.max(x1, level.dropZone[1] + 70); }
-      const topY = WORLD.groundY - Math.max(level.structure === 'truss' ? level.height + 50 : level.floors * level.floorH + (level.roof === 'spire' ? 100 : level.roof ? 50 : 0),
+      const topY = WORLD.groundY - Math.max(th,
         ...ns.map((n) => n.h + (n.style === 'church' ? 170 : 0)));
       let y0 = topY - 60;
       const y1 = WORLD.groundY + 18;
@@ -278,6 +282,7 @@
         this.drawBuilding(ctx, sc, state);
         if (state.xray) this.drawXray(ctx, sc, state.xray);
         this.drawCars(ctx, sc);
+        if (sc.level.water) this.drawWater(ctx, sc);
         this.drawCharges(ctx, sc, state);
         if (state.hover) this.drawHover(ctx, state.hover, state);
         this.drawPeople(ctx, sc, state);
@@ -382,6 +387,12 @@
         ctx.setLineDash([]);
       }
       if (sc.dropZone) this.drawDropZone(ctx, sc.dropZone, state);
+      if (sc.level.water) {
+        const [w0, w1] = sc.level.water;
+        ctx.fillStyle = '#6b5a45';
+        ctx.fillRect(w0, gy, w1 - w0, 12);
+      }
+      if (sc.abutments) this.drawAbutments(ctx, sc);
       for (const x of [left, right]) {
         ctx.save();
         ctx.translate(x, gy - 16);
@@ -657,6 +668,8 @@
         if (pc.kind === 'spire') { this.drawSpire(ctx, pc, hoverBody === b); ctx.restore(); continue; }
         if (pc.kind === 'belfry') { this.drawBelfry(ctx, pc, hoverBody === b); ctx.restore(); continue; }
         if (pc.kind === 'beam') { this.drawBeam(ctx, pc, hoverBody === b); ctx.restore(); continue; }
+        if (pc.kind === 'saucer') { this.drawSaucer(ctx, pc, hoverBody === b); ctx.restore(); continue; }
+        if (pc.kind === 'needle') { this.drawNeedleTip(ctx, pc, hoverBody === b); ctx.restore(); continue; }
         if (pc.kind === 'frag') {
           let base;
           if (pc.parentKind === 'glass') {
@@ -673,7 +686,9 @@
           else if (pc.parentKind === 'sign') base = '#ffd23f';
           else if (pc.parentKind === 'spire') base = '#4f6d7a';
           else if (pc.parentKind === 'belfry') base = '#f3efe6';
-          else if (pc.parentKind === 'beam') base = '#6b4f3a';
+          else if (pc.parentKind === 'beam') base = pc.stone ? '#b9ad98' : this.beamColors(material)[0];
+          else if (pc.parentKind === 'saucer') base = '#dfe6ec';
+          else if (pc.parentKind === 'needle') base = '#c9d2da';
           else base = this.pieceColors(material, pc.parentKind === 'slab' ? 'slab' : 'column');
           ctx.fillStyle = shadeHex(base, pc.shade * 0.95);
           ctx.strokeStyle = '#4a4e57';
@@ -691,6 +706,19 @@
         ctx.beginPath();
         ctx.roundRect(-pc.w / 2, -pc.h / 2, pc.w, pc.h, 2);
         ctx.fill(); ctx.stroke();
+        if (pc.archUnder) {
+          const w = pc.w, y = pc.h / 2, d = 50;
+          ctx.fillStyle = shadeHex('#cfae72', pc.shade);
+          ctx.beginPath();
+          ctx.moveTo(-w / 2, y); ctx.lineTo(w / 2, y); ctx.lineTo(w / 2, y + d);
+          ctx.ellipse(0, y + d, w / 2 - 7, d - 8, 0, 0, Math.PI, true);
+          ctx.lineTo(-w / 2, y + d); ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.ellipse(0, y + d, w / 2 - 7, d - 8, 0, 0, Math.PI, true); ctx.stroke();
+          // parapet and track on top
+          ctx.fillStyle = '#8a6a3a';
+          ctx.fillRect(-w / 2, -pc.h / 2 - 4, w, 3);
+        }
         if (material === 'steel') {
           // I-beam flanges and rivets
           ctx.strokeStyle = 'rgba(30,40,50,0.45)'; ctx.lineWidth = 1;
@@ -751,11 +779,32 @@
     }
 
     // Wrought-iron lattice girder (a rectangle along its local x axis)
+    beamColors(material) {
+      if (material === 'whitesteel') return ['#eef2f5', '#8795a1'];
+      if (material === 'redsteel') return ['#d2492f', '#7a2415'];
+      return ['#6b4f3a', '#3e2c20'];
+    }
+
+    // Lattice girder (a rectangle along its local x axis)
     drawBeam(ctx, pc, hover) {
       const l = pc.w, t = pc.h;
-      const col = '#6b4f3a', dark = '#3e2c20';
+      const [col, dark] = this.beamColors(pc.material);
+      if (pc.pier) {
+        // masonry pier
+        ctx.fillStyle = shadeHex('#b9ad98', pc.shade);
+        ctx.strokeStyle = hover ? '#ff3b30' : '#6f6553';
+        ctx.lineWidth = hover ? 2.5 : 1.5;
+        ctx.fillRect(-l / 2, -t / 2, l, t); ctx.strokeRect(-l / 2, -t / 2, l, t);
+        ctx.strokeStyle = 'rgba(80,70,50,0.45)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let x = -l / 2 + 10, k = 0; x < l / 2; x += 10, k++) {
+          ctx.moveTo(x, -t / 2); ctx.lineTo(x, t / 2);
+          ctx.moveTo(x - 5, k % 2 ? -t / 2 : 0); ctx.lineTo(x - 5, k % 2 ? 0 : t / 2);
+        }
+        ctx.stroke();
+        return;
+      }
       if (pc.arch) {
-        // decorative arch hanging below the first platform
         ctx.strokeStyle = col; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.ellipse(0, t / 2, l / 2 - 6, 26, 0, 0, Math.PI); ctx.stroke();
       }
@@ -764,12 +813,22 @@
         ctx.fillStyle = '#e63946'; ctx.fillRect(l / 2 - 10, -8, 10, 6);
         return;
       }
+      if (pc.road) {
+        // road deck: steel girder with asphalt on top
+        ctx.fillStyle = col; ctx.strokeStyle = hover ? '#ff3b30' : dark; ctx.lineWidth = hover ? 2.2 : 1.2;
+        ctx.fillRect(-l / 2, -t / 2, l, t); ctx.strokeRect(-l / 2, -t / 2, l, t);
+        ctx.fillStyle = '#3d4046';
+        ctx.fillRect(-l / 2, -t / 2, l, 4);
+        ctx.fillStyle = '#f1e9c9';
+        for (let x = -l / 2 + 6; x < l / 2 - 8; x += 20) ctx.fillRect(x, -t / 2 + 1.5, 9, 1);
+        return;
+      }
       ctx.strokeStyle = hover ? '#ff3b30' : dark;
       ctx.lineWidth = hover ? 2.2 : 1.4;
-      ctx.fillStyle = 'rgba(107,79,58,0.25)';
+      ctx.fillStyle = pc.material === 'iron' ? 'rgba(107,79,58,0.25)' : col;
       ctx.fillRect(-l / 2, -t / 2, l, t);
       ctx.beginPath(); ctx.moveTo(-l / 2, -t / 2); ctx.lineTo(l / 2, -t / 2); ctx.moveTo(-l / 2, t / 2); ctx.lineTo(l / 2, t / 2); ctx.stroke();
-      ctx.strokeStyle = hover ? '#ff3b30' : col; ctx.lineWidth = 1;
+      ctx.strokeStyle = hover ? '#ff3b30' : (pc.material === 'iron' ? col : dark); ctx.lineWidth = 1;
       ctx.beginPath();
       const step = Math.max(5, t * 1.2);
       for (let x = -l / 2, up = true; x < l / 2 - 0.1; x += step, up = !up) {
@@ -777,11 +836,87 @@
       }
       ctx.stroke();
       if (pc.deck) {
-        // platform railing
         ctx.strokeStyle = dark; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(-l / 2, -t / 2 - 6); ctx.lineTo(l / 2, -t / 2 - 6);
         for (let x = -l / 2; x <= l / 2; x += 6) { ctx.moveTo(x, -t / 2); ctx.lineTo(x, -t / 2 - 6); }
         ctx.stroke();
+      }
+    }
+
+    // Flying-saucer observation deck
+    drawSaucer(ctx, pc, hover) {
+      const w = pc.w, h = pc.h;
+      const edge = hover ? '#ff3b30' : '#6b7884';
+      ctx.lineWidth = hover ? 2.5 : 1.6; ctx.strokeStyle = edge;
+      // underside flare
+      ctx.fillStyle = '#c3ccd4';
+      ctx.beginPath(); ctx.moveTo(-w / 2 + 6, 0); ctx.lineTo(w / 2 - 6, 0); ctx.lineTo(28, h / 2); ctx.lineTo(-28, h / 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+      // main disc
+      ctx.fillStyle = '#f4f6f8';
+      ctx.beginPath(); ctx.ellipse(0, -2, w / 2, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      // window band
+      ctx.fillStyle = '#274a66';
+      ctx.beginPath(); ctx.roundRect(-w / 2 + 14, -5, w - 28, 5, 2); ctx.fill();
+      ctx.fillStyle = '#ffd23f';
+      for (let x = -w / 2 + 20; x < w / 2 - 20; x += 12) ctx.fillRect(x, -4, 6, 3);
+      // roof dome with the orange cap
+      ctx.fillStyle = '#ff7b00';
+      ctx.beginPath(); ctx.ellipse(0, -8, w * 0.3, 7, 0, Math.PI, 0); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#e9edf0';
+      ctx.beginPath(); ctx.ellipse(0, -11, w * 0.14, 5, 0, Math.PI, 0); ctx.fill(); ctx.stroke();
+    }
+
+    drawNeedleTip(ctx, pc, hover) {
+      const w = pc.w, h = pc.h;
+      ctx.fillStyle = '#d6dde3'; ctx.strokeStyle = hover ? '#ff3b30' : '#6b7884'; ctx.lineWidth = hover ? 2 : 1;
+      ctx.beginPath(); ctx.moveTo(-w / 2, h / 2); ctx.lineTo(-0.8, -h / 2); ctx.lineTo(0.8, -h / 2); ctx.lineTo(w / 2, h / 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = Math.floor(this.time * 2) % 2 ? '#ff2d2d' : '#7a1010';
+      ctx.beginPath(); ctx.arc(0, -h / 2, 2.2, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // River: translucent water over whatever has sunk into it
+    drawWater(ctx, sc) {
+      const [x0, x1] = sc.level.water;
+      const gy = WORLD.groundY, d = root.DemoPhysics.WATER_DEPTH;
+      const g = ctx.createLinearGradient(0, gy - d, 0, gy + 12);
+      g.addColorStop(0, 'rgba(70,160,225,0.62)'); g.addColorStop(1, 'rgba(20,80,150,0.85)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x0, gy - d, x1 - x0, d + 12);
+      ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let x = x0; x <= x1; x += 6) {
+        const y = gy - d + Math.sin(x * 0.07 + this.time * 2.2) * 1.4;
+        if (x === x0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1;
+      for (let x = x0 + 20; x < x1 - 20; x += 46) {
+        const o = Math.sin(this.time * 1.3 + x) * 6;
+        ctx.beginPath(); ctx.moveTo(x + o, gy - d + 9); ctx.lineTo(x + o + 14, gy - d + 9); ctx.stroke();
+      }
+    }
+
+    drawAbutments(ctx, sc) {
+      const gy = WORLD.groundY;
+      for (const a of sc.abutments) {
+        const inner = a.x - a.side * a.w / 2, outer = a.x + a.side * a.w / 2, top = gy - a.h + 10;
+        // approach ramp behind the abutment
+        ctx.fillStyle = '#7cc66b';
+        ctx.beginPath(); ctx.moveTo(outer, top + 4); ctx.lineTo(outer + a.side * 230, gy); ctx.lineTo(outer, gy); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#3d4046'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(outer, top + 2); ctx.lineTo(outer + a.side * 230, gy - 2); ctx.stroke();
+        // stone block
+        ctx.fillStyle = '#b9ad98'; ctx.strokeStyle = '#6f6553'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.rect(Math.min(inner, outer), top, a.w, gy - top + 12); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = 'rgba(80,70,50,0.4)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let y = top + 12; y < gy; y += 12) { ctx.moveTo(Math.min(inner, outer), y); ctx.lineTo(Math.max(inner, outer), y); }
+        ctx.stroke();
+        // bearing shelf reaching to the bridge end, and the road on top
+        ctx.fillStyle = '#8f8573';
+        ctx.fillRect(Math.min(inner, inner - a.side * 12), top + 5, 12, 6);
+        ctx.fillStyle = '#3d4046';
+        ctx.fillRect(Math.min(inner, outer), top - 4, a.w, 5);
       }
     }
 
@@ -978,6 +1113,7 @@
 
     drawPeople(ctx, sc, state) {
       for (const p of sc.people) {
+        if (p.boat) { this.drawBoat(ctx, p, state); continue; }
         const running = p.state === 'shoo' || p.state === 'panic';
         const moving = running || p.state === 'walk';
         ctx.save();
@@ -1031,6 +1167,52 @@
           ctx.lineWidth = 2;
           ctx.beginPath(); ctx.ellipse(p.x, p.y - 1, 10, 3.5, 0, 0, Math.PI * 2); ctx.stroke();
         }
+      }
+    }
+
+    drawBoat(ctx, p, state) {
+      const bob = Math.sin(this.time * 2.4 + p.id) * 1.2;
+      const moving = p.state !== 'watch';
+      ctx.save();
+      ctx.translate(p.x, p.y + bob);
+      ctx.scale(p.dir < 0 ? -1 : 1, 1);
+      ctx.rotate(Math.sin(this.time * 1.7 + p.id) * 0.04);
+      // hull
+      ctx.fillStyle = p.shirt; ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-17, -6); ctx.lineTo(19, -6); ctx.lineTo(13, 4); ctx.lineTo(-14, 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.fillRect(-16, -7.5, 34, 2.5);
+      // cabin and skipper
+      ctx.fillStyle = '#fdf6e3'; ctx.beginPath(); ctx.roundRect(-10, -17, 14, 10, 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#7cc0ea'; ctx.fillRect(-7, -15, 8, 4);
+      ctx.fillStyle = p.skin; ctx.beginPath(); ctx.arc(9, -11, 3.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1d3557'; ctx.fillRect(6, -15.5, 6.5, 2);
+      ctx.restore();
+      if (moving) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(p.x - p.dir * 18, p.y + 1); ctx.lineTo(p.x - p.dir * 30, p.y + 2); ctx.stroke();
+      }
+      const txt = p.state === 'panic' ? 'ABANDON SHIP!' : p.state === 'shoo' ? 'Aye aye!' : p.state === 'watch' ? (p.say > 0 ? 'Ahoy!' : '') : '';
+      if (txt) {
+        ctx.font = 'bold 9px system-ui, sans-serif'; ctx.textAlign = 'center';
+        const tw = ctx.measureText(txt).width + 8;
+        ctx.fillStyle = p.state === 'panic' ? '#ffdddd' : '#fff'; ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.roundRect(p.x - tw / 2, p.y - 38, tw, 13, 4); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#3a2a1a'; ctx.fillText(txt, p.x, p.y - 28.5);
+      }
+      if (state.showLot && (p.state === 'watch' || p.state === 'walk')) {
+        const a = 0.5 + 0.5 * Math.sin(this.time * 6);
+        ctx.strokeStyle = `rgba(255,60,40,${0.4 + a * 0.5})`; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(p.x, p.y + 2, 24, 6, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+
+    addSplash(x, y, big) {
+      for (let i = 0; i < (big ? 12 : 5); i++) {
+        this.particles.push({
+          t: 'chip', col: 'rgba(200,235,255,0.9)', x: x + (Math.random() - 0.5) * 14, y,
+          vx: (Math.random() - 0.5) * 120, vy: -80 - Math.random() * (big ? 220 : 120), rot: 0, vr: 0,
+          sz: 2 + Math.random() * 2.5, life: 0, max: 0.5 + Math.random() * 0.5,
+        });
       }
     }
 
@@ -1168,7 +1350,7 @@
           ctx.fillStyle = `rgba(200,240,255,${1 - p.life / p.max})`;
           ctx.beginPath(); ctx.moveTo(-p.sz / 2, p.sz / 2); ctx.lineTo(0, -p.sz / 2); ctx.lineTo(p.sz / 2, p.sz / 2); ctx.fill();
         } else {
-          ctx.fillStyle = '#8d8f96';
+          ctx.fillStyle = p.col || '#8d8f96';
           ctx.fillRect(-p.sz / 2, -p.sz / 2, p.sz, p.sz);
         }
         ctx.restore();

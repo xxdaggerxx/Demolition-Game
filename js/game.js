@@ -3,6 +3,7 @@
   const P = window.DemoPhysics;
   const LEVELS = window.LEVELS;
   const $ = (id) => document.getElementById(id);
+  const WORLD_GY = window.DemoPhysics.WORLD.groundY;
   const money = (n) => '$' + Math.round(n).toLocaleString('en-US');
 
   const canvas = $('game');
@@ -166,7 +167,7 @@
     }
     if (state.chargeType !== 'standard' && !owns(state.chargeType)) state.chargeType = 'standard';
     $('btnNetting').classList.toggle('hidden', !owns('netting'));
-    $('btnXray').classList.toggle('hidden', !owns('xray') || !!(state.sim && state.sim.truss));
+    $('btnXray').classList.toggle('hidden', !owns('xray') || !!(state.sim && (state.sim.truss || state.sim.noXray)));
     $('btnXray').classList.toggle('on', state.xray);
     $('btnMegaphone').classList.toggle('hidden', !owns('megaphone'));
     if (state.sim) $('btnNetting').classList.toggle('on', state.sim.netting);
@@ -394,6 +395,13 @@
         ? pick([`Theme park says farewell to its ${n} replica`, `Tourists snap final selfies as ${n} replica falls`, `Souvenir shop sells out of mini ${n}s`])
         : pick([`${n} replica proves tougher than the original`, `Theme park closure delayed — ${n} still standing`]));
     }
+    if (L.water) {
+      out.push(ev.success ? pick(['SPLASHDOWN! Span drops into the river', 'River traffic halted as bridge hits the water', 'Local anglers report “unusually large catch”'])
+        : pick(['Bridge shrugs off blast — commuters unimpressed', 'Ferry service extended indefinitely']));
+      if (ev.bystanders) out.push('Boat skippers demand new paint after close shave');
+    }
+    if (L.shape === 'needle' && ev.success) out.push(pick(['Flying saucer finally lands', 'Saucer deck touches down — no aliens found inside']));
+    if (L.profile && ev.success && L.id === 15) out.push('Twin towers go down together, skybridge and all');
     if (L.lean && ev.success) out.push('After centuries of leaning (well, a few years), the tower finally lies down');
     if (L.clockFloor != null && ev.success) out.push('Clock stops for good — witnesses confirm the exact time');
     if (ev.success && ev.underBudget >= 0.4) out.push(`Demolition firm finishes ${money(ev.budget - ev.spent)} under budget`);
@@ -552,7 +560,7 @@
     else { local.x = Math.max(-pc.w / 2 + 6, Math.min(pc.w / 2 - 6, local.x)); local.y = Math.max(-pc.h / 2 + 6, Math.min(pc.h / 2 - 6, local.y)); }
     const point = Matter.Vector.add(body.position, Matter.Vector.rotate(local, body.angle));
     let weak = null;
-    const label = { column: 'column', slab: 'slab', tank: 'water tank', sign: 'billboard', spire: 'spire', belfry: 'belfry', beam: 'iron girder' }[pc.kind];
+    const label = { column: 'column', slab: 'slab', tank: 'water tank', sign: 'billboard', spire: 'spire', belfry: 'belfry', beam: pc.pier ? 'stone pier' : 'girder', saucer: 'saucer deck', needle: 'antenna' }[pc.kind];
     if (state.chargeType !== 'cutter' && state.strength < pc.toughness) weak = `Needs strength ${pc.toughness}+ to cut this ${label}`;
     const cost = P.chargeCost(state.chargeType, state.strength);
     return { body, point, weak, cost: `${money(cost)} · ${money(budgetLeft())} left` };
@@ -778,7 +786,9 @@
       audio.crumble(4);
       audio.rumble();
     } else if (f.type === 'impact') {
-      if (f.ground && f.speed > 2.5) renderer.addDust(f.x, f.y, f.mass > 1 ? 4 : 1, f.mass > 1, f.material === 'brick');
+      const wet = state.sim.level.water && f.x > state.sim.level.water[0] && f.x < state.sim.level.water[1];
+      if (f.ground && wet) renderer.addSplash(f.x, WORLD_GY - P.WATER_DEPTH, f.mass > 1);
+      else if (f.ground && f.speed > 2.5) renderer.addDust(f.x, f.y, f.mass > 1 ? 4 : 1, f.mass > 1, f.material === 'brick');
       audio.crumble(Math.min(6, f.speed * f.mass));
     } else if (f.type === 'glass') {
       renderer.addGlass(f.x, f.y, f.w, f.h);
@@ -859,7 +869,7 @@
     const scene = state.phase === 'replay'
       ? P.frameScene(sim, state.rec, frameIndexAt(state.rec, state.replay.t))
       : P.liveScene(sim);
-    const xrayOn = state.xray && state.phase === 'plan' && owns('xray') && !sim.truss;
+    const xrayOn = state.xray && state.phase === 'plan' && owns('xray') && !sim.truss && !sim.noXray;
     $('xrayLegend').classList.toggle('hidden', !xrayOn);
     renderer.draw({
       xray: xrayOn ? P.loadMap(sim) : null,
