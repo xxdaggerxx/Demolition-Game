@@ -61,11 +61,15 @@
       const top = this.insetTop || 0, bottom = this.insetBottom || 0;
       const view = this.view || DEFAULT_VIEW;
       const availH = Math.max(200, h - top - bottom);
-      const scale = Math.min(w / (view.x1 - view.x0), availH / (view.y1 - view.y0));
+      // Phones held upright: frame just the job site so the building isn't tiny;
+      // the neighbours are a drag away.
+      let fit = view;
+      if (this.focus && h > w * 1.15) fit = { x0: Math.max(view.x0, this.focus.x0), x1: Math.min(view.x1, this.focus.x1), y0: view.y0, y1: view.y1 };
+      const scale = Math.min(w / (fit.x1 - fit.x0), availH / (fit.y1 - fit.y0));
       // Base framing; the player's pinch/pan camera sits on top of it.
       this.base = {
         scale,
-        ox: w / 2 - ((view.x0 + view.x1) / 2) * scale,
+        ox: w / 2 - ((fit.x0 + fit.x1) / 2) * scale,
         // sit the street just above the toolbar; spare space goes to the sky
         oy: top + availH - view.y1 * scale,
         view,
@@ -84,7 +88,7 @@
 
     // Frame the camera on a level: both neighbours plus some headroom.
     setLevel(level) {
-      if (!level) { this.view = null; this.resize(); return; }
+      if (!level) { this.view = null; this.focus = null; this.resize(); return; }
       const ns = level.neighbors;
       const bw = level.shape === 'bridge' ? level.span + 170 : level.shape === 'needle' ? level.saucerW
         : level.structure === 'truss' ? level.baseHalf * 2 : level.bays * level.bayW;
@@ -102,6 +106,11 @@
       if (y1 - y0 < 420) y0 = y1 - 420;
       if (x1 - x0 < 760) { const c = (x0 + x1) / 2; x0 = c - 380; x1 = c + 380; }
       this.view = { x0, x1, y0, y1 };
+      // the job site: building plus a little street, or the whole drop zone / river
+      let f0 = level.x - bw / 2 - 50, f1 = level.x + bw / 2 + 50;
+      if (level.dropZone) { f0 = Math.min(f0, level.dropZone[0] - 20); f1 = Math.max(f1, level.dropZone[1] + 20); }
+      if (level.water) { f0 = Math.min(f0, level.water[0] - 20); f1 = Math.max(f1, level.water[1] + 20); }
+      this.focus = { x0: f0, x1: f1 };
       this.resize();
       this.resetCamera();
     }

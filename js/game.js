@@ -14,19 +14,19 @@
   // ---------------- Shop catalogue ----------------
   const SHOP = [
     { id: 'megaphone', icon: '📢', name: 'Megaphone', price: 800,
-      desc: 'Adds a “Clear area” button that sends every bystander running out of the danger zone at once.' },
+      desc: 'Clear every bystander with one tap.' },
     { id: 'overtime', icon: '⏱', name: 'Overtime Permit', price: 1500,
-      desc: '+30 seconds of planning time on every job.' },
+      desc: '+30 s planning time.' },
     { id: 'detonator', icon: '🎛', name: 'Precision Detonator', price: 2000,
-      desc: 'Finer fuse delays: 0.1s, 0.75s, 2.5s and 3s for perfectly sequenced implosions.' },
+      desc: 'Finer fuse delays, up to 3 s.' },
     { id: 'xray', icon: '🩻', name: 'Load X-ray', price: 2500,
-      desc: 'See how much weight every column carries, and which ones will lose their support once your charges go off.' },
+      desc: 'See which columns carry the load.' },
     { id: 'shaped', icon: '🔻', name: 'Shaped Charges', price: 3500,
-      desc: 'Copper-lined charges that focus the blast toward the middle of the building — far less debris thrown outward. Cost 60% more per charge.' },
+      desc: 'Aim the blast inward. Less flying debris.' },
     { id: 'netting', icon: '🕸', name: 'Debris Netting', price: 4000,
-      desc: `Hang protective nets on the neighbours (${money(P.NETTING_COST)} per job from the budget). Hits on them cost ~90% less.` },
+      desc: `Nets on the neighbours: hits cost ~90% less (${money(P.NETTING_COST)}/job).` },
     { id: 'cutter', icon: '✂', name: 'Cutter Charges', price: 5000,
-      desc: `Linear cutting charges slice any member — even steel — cleanly with almost no blast. ${money(P.chargeCost('cutter', 0))} each.` },
+      desc: `Slice anything, even steel. Tiny blast. ${money(P.chargeCost('cutter', 0))} each.` },
   ];
   const BASE_DELAYS = [0, 0.25, 0.5, 1, 1.5, 2];
   const FINE_DELAYS = [0, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3];
@@ -89,8 +89,11 @@
       const d = L.difficulty || 1;
       const stars = best ? '★'.repeat(best.stars) + '☆'.repeat(3 - best.stars) : '☆☆☆';
       const mat = P.MATERIALS[L.material || 'concrete'].name;
-      b.innerHTML = `<span class="n">Job ${L.id} · ${mat}${L.topple ? ' · ↔' : ''}${L.landmark ? ' · ' + L.landmark : ''}</span><span class="t">${L.name}</span>
-        <span class="s">${stars}</span><br><span class="d d${d}">${'●'.repeat(d)}${'○'.repeat(5 - d)} ${DIFF_NAME[d]}</span><br><span class="p">💰 ${money(payRate(L) * 1000)} / 1,000 pts</span><br><span class="b">${best ? 'Best: ' + best.score + ' · ' : ''}Budget ${money(L.budget)}</span>`;
+      const tags = (L.topple ? ' ↔' : '') + (L.landmark ? ' ' + L.landmark : '');
+      b.title = `${mat}${L.topple ? ' · directional job' : ''} · budget ${money(L.budget)}`;
+      b.innerHTML = `<span class="n">#${L.id} · ${mat}${tags}</span><span class="t">${L.name}</span>
+        <span class="row"><span class="s">${stars}</span><span class="d d${d}" title="${DIFF_NAME[d]}">${'●'.repeat(d)}${'○'.repeat(5 - d)}</span></span>
+        <span class="p">💰 ×${payRate(L)}${best ? ` · <b>${best.score}</b>` : ''}</span>`;
       b.onclick = () => { audio.click(); startLevel(i); };
       grid.appendChild(b);
     });
@@ -106,7 +109,7 @@
         ? '<button class="btn small" disabled>Owned ✓</button>'
         : `<button class="btn small ${progress.cash >= it.price ? 'red' : ''}" ${progress.cash >= it.price ? '' : 'disabled'}>Buy ${money(it.price)}</button>`;
       d.innerHTML = `<div class="top"><span class="ic">${it.icon}</span><span class="nm">${it.name}</span></div>
-        <div class="ds">${it.desc}</div>${btn}`;
+        <div class="ds" data-name="${it.name}">${it.desc}</div>${btn}`;
       const b = d.querySelector('button');
       if (!owns(it.id)) {
         b.onclick = () => {
@@ -258,6 +261,9 @@
     audio.setMode('plan');
     if (restored) {
       toast(`🔁 Your previous setup is back (${restored} charge${restored > 1 ? 's' : ''}${skipped ? `, ${skipped} couldn't be re-placed` : ''}). Tweak it or detonate!`, 3500);
+    } else if (window.innerHeight > window.innerWidth * 1.15 && !state.rotateTipShown) {
+      state.rotateTipShown = true;
+      toast('📱↻ Turn your phone sideways for a wider view', 3500);
     } else toast(L.blurb, 4000);
   }
 
@@ -319,21 +325,22 @@
       starsEl.appendChild(s);
     }
     const pct = (v) => Math.round(v * 100) + '%';
+    // Short icon rows; penalties only appear when you actually got one.
     const rows = [
-      ['Collapse', pct(ev.collapse), ev.collapsePts],
-      ['Debris kept on the lot', pct(ev.contain), ev.containPts],
-      ...(ev.directional ? [[`Toppled ${L.topple} into the drop zone`, pct(ev.direction), ev.directionPts]] : []),
-      ['Under budget', `${money(ev.spent)} of ${money(ev.budget)}`, ev.budgetPts],
-      ['Hits on neighbours', String(ev.hits), -ev.neighborPen],
+      ['🏚️ Collapse', pct(ev.collapse), ev.collapsePts],
+      ['📦 On the lot', pct(ev.contain), ev.containPts],
+      ...(ev.directional ? [[`${L.topple === 'left' ? '⬅️' : '➡️'} Toppled`, pct(ev.direction), ev.directionPts]] : []),
+      ['💵 Budget', `${money(ev.spent)} / ${money(ev.budget)}`, ev.budgetPts],
     ];
-    if (L.cars && L.cars.length) rows.push(['Cars damaged', String(ev.carHits), -ev.carPen]);
-    rows.push(['Bystanders in the blast zone', String(ev.bystanders), -ev.bystanderPen]);
-    rows.push(['Time bonus', Math.round(state.detonatedWithLeft) + 's left', timeBonus]);
+    if (ev.neighborPen) rows.push(['🏢 Neighbours hit', '×' + ev.hits, -ev.neighborPen]);
+    if (ev.carPen) rows.push(['🚗 Cars hit', '×' + ev.carHits, -ev.carPen]);
+    if (ev.bystanderPen) rows.push(['🙋 Bystanders', '×' + ev.bystanders, -ev.bystanderPen]);
+    rows.push(['⏱️ Time left', Math.round(state.detonatedWithLeft) + 's', timeBonus]);
     $('resTable').innerHTML = rows.map(([a, b, c]) =>
       `<tr><td>${a}</td><td>${b}</td><td class="${c < 0 ? 'neg' : ''}">${c > 0 ? '+' : ''}${c}</td></tr>`).join('');
     $('resTotal').textContent = ev.success ? `Score: ${total}`
-      : ev.directional && ev.collapse >= 0.6 ? `Topple it ${L.topple.toUpperCase()} into the drop zone to pass`
-        : 'Collapse at least 60% of the building to pass';
+      : ev.directional && ev.collapse >= 0.6 ? `Topple it ${L.topple.toUpperCase()} to pass`
+        : 'Bring down 60% to pass';
     setTicker(headlines(ev, L, sim, timeBonus));
 
     const prev = progress.best[L.id];
@@ -350,8 +357,8 @@
     }
     $('resBest').textContent = bestMsg;
     $('resPay').textContent = ev.success
-      ? `💰 Payout: ${money(pay)} (${DIFF_NAME[L.difficulty || 1]} job${prev ? ', repeat 30%' : ''}) · Company cash: ${money(progress.cash)}`
-      : `No payout · Company cash: ${money(progress.cash)}`;
+      ? `💰 +${money(pay)}${prev ? ' (repeat)' : ''} → ${money(progress.cash)}`
+      : `💰 ${money(progress.cash)}`;
     const hasNext = state.levelIndex + 1 < LEVELS.length;
     $('btnNext').classList.toggle('hidden', !hasNext);
     $('btnReplay').classList.toggle('hidden', !state.rec || state.rec.frames.length < 2);

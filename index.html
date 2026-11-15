@@ -86,34 +86,31 @@
     <div class="card" id="screenTitle">
       <h1>IMPLODE!</h1>
       <h2>Controlled Demolition</h2>
-      <p>Plant explosives on the building, set their strength and fuse delays, then bring it down
-        <b>on its own footprint</b>. Debris that hits the neighbouring buildings costs you points.</p>
-      <ul class="howto">
-        <li><b>Tap/click</b> a column or floor slab to plant a charge. Tap a charge to remove it.</li>
-        <li>Every charge costs money from the job's <b>budget</b>. Earn cash, then upgrade in the <b>shop</b>.</li>
-        <li><b>Tap bystanders</b> to shoo them out of the danger zone, and don't crush the parked cars.</li>
-        <li><b>Pinch</b> (or mouse wheel) to zoom, <b>drag</b> to move the camera.</li>
-        <li><b>Strength</b> 1–10: columns need ≥3 to cut, slabs ≥4. Stronger = bigger blast, more flying debris.</li>
-        <li><b>Fuse delay</b> lets you sequence the blasts — cut the middle first so it falls inward.</li>
-        <li>Detonate before the <b>planning timer</b> runs out!</li>
-      </ul>
+      <p class="tagline">Drop it on its own footprint. Miss the neighbours.</p>
+      <div class="steps">
+        <div><span>🧨</span>Tap a column</div>
+        <div><span>🎚️</span>Set strength &amp; delay</div>
+        <div><span>🙋</span>Tap people away</div>
+        <div><span>💥</span>Detonate!</div>
+      </div>
       <button class="btn red big" id="btnPlay">PLAY</button>
-      <p class="keys">Keys: 1–0 strength · Space detonate · +/− zoom · V reset view · R retry · Esc levels · M music</p>
+      <p class="keys">Pinch to zoom · drag to look around</p>
+      <p class="keys desk">Keys: 1–0 strength · Space detonate · R retry · Esc levels</p>
     </div>
     <div class="card hidden" id="screenLevels">
       <h2>Choose a job</h2>
-      <div class="wallet">Company cash: <b class="cashVal">$0</b></div>
+      <div class="wallet">💰 <b class="cashVal">$0</b></div>
       <div id="levelGrid"></div>
       <div class="btns">
-        <button class="btn" id="btnBackTitle">Back</button>
+        <button class="btn" id="btnBackTitle">◀</button>
         <button class="btn red" id="btnShop">🛒 Shop</button>
       </div>
     </div>
     <div class="card hidden" id="screenShop">
-      <h2>🛒 Demolition Supply Co.</h2>
-      <div class="wallet">Company cash: <b class="cashVal">$0</b></div>
+      <h2>🛒 Shop</h2>
+      <div class="wallet">💰 <b class="cashVal">$0</b></div>
       <div id="shopGrid"></div>
-      <button class="btn" id="btnShopBack">Back to jobs</button>
+      <button class="btn" id="btnShopBack">◀ Jobs</button>
     </div>
     <div class="card hidden" id="screenResult">
       <div class="ticker"><span class="tag">BREAKING</span><div class="tk"><span id="tickerText"></span></div></div>
@@ -124,10 +121,10 @@
       <div id="resBest" class="best"></div>
       <div id="resPay" class="pay"></div>
       <div class="btns">
-        <button class="btn" id="btnLevels">Levels</button>
+        <button class="btn" id="btnLevels" title="Jobs">☰</button>
         <button class="btn" id="btnReplay">🎬 Replay</button>
-        <button class="btn" id="btnRetry">Retry</button>
-        <button class="btn red" id="btnNext">Next job ▶</button>
+        <button class="btn" id="btnRetry">↻ Retry</button>
+        <button class="btn red" id="btnNext">Next ▶</button>
       </div>
     </div>
   </div>

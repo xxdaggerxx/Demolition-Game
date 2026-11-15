@@ -146,7 +146,7 @@ button { font-family: inherit; cursor: pointer; }
   .hud-box { min-width: 0; }
 }
 /* compact toolbar for phones in landscape and other short screens */
-@media (max-height: 520px) {
+@media (max-height: 520px), (max-width: 600px) {
   #toolbar { flex-wrap: nowrap; gap: 8px; padding: 5px 8px; max-width: calc(100vw - 12px); overflow-x: auto; }
   #toolbar .lbl, #toolbar .hint, #toolbar .kg, #toolbar .tx, #typeCost { display: none; }
   #toolbar .group { gap: 2px; }
@@ -180,3 +180,96 @@ button { font-family: inherit; cursor: pointer; }
 .lvl .d { font-size: 11px; font-weight: 800; letter-spacing: 0.5px; }
 .lvl .d1 { color: #2a8a2a; } .lvl .d2 { color: #5a8a1a; } .lvl .d3 { color: #c98a00; } .lvl .d4 { color: #d6601a; } .lvl .d5 { color: #d62828; }
 .lvl .p { font-size: 12px; font-weight: 800; color: #2a8a2a; }
+
+/* ---------- Title screen: picture steps instead of paragraphs ---------- */
+.tagline { font-size: 17px; font-weight: 700; margin: 0 0 14px; }
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0 0 18px; }
+.steps div { background: #fff; border: 3px solid #3a2a1a; border-radius: 14px; padding: 10px 6px; font-weight: 800; font-size: 13px; line-height: 1.2; box-shadow: 0 3px 0 #3a2a1a; }
+.steps span { display: block; font-size: 30px; margin-bottom: 4px; }
+.keys { margin: 10px 0 0; }
+@media (hover: none) { .keys.desk { display: none; } }
+
+/* compact job cards */
+.lvl { display: flex; flex-direction: column; gap: 2px; }
+.lvl .row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.lvl .p b { color: #3a2a1a; }
+.wallet b { font-size: 22px; }
+
+/* ---------- Phones held upright ---------- */
+@media (max-width: 600px) {
+  #overlay { align-items: flex-start; padding-top: 12px; overflow-y: auto; }
+  .card { padding: 16px 14px; border-radius: 18px; width: calc(100vw - 20px); max-height: none; margin-bottom: 16px; }
+  .card h1 { font-size: 46px; -webkit-text-stroke: 2px #3a2a1a; text-shadow: 0 4px 0 #3a2a1a; }
+  .card h2 { font-size: 20px; margin: 2px 0 8px; }
+  .tagline { font-size: 15px; }
+  .steps { grid-template-columns: 1fr 1fr; }
+  .steps div { display: flex; align-items: center; gap: 8px; text-align: left; padding: 8px 10px; font-size: 14px; }
+  .steps span { font-size: 26px; margin: 0; }
+  .btn.big { font-size: 22px; padding: 14px 40px; }
+  #levelGrid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .lvl { padding: 8px; border-radius: 12px; }
+  .lvl .t { font-size: 15px; line-height: 1.15; }
+  .lvl .n { font-size: 11px; }
+  .lvl .s { font-size: 15px; letter-spacing: 1px; }
+  #shopGrid { grid-template-columns: 1fr; gap: 8px; }
+  .item { flex-direction: row; align-items: center; padding: 8px; gap: 8px; }
+  .item .top { flex: none; }
+  .item .nm { display: none; }
+  .item .ds { font-size: 13px; }
+  .item .ds::before { content: attr(data-name); display: block; font-weight: 800; font-size: 15px; opacity: 1; }
+  .item .btn { flex: none; }
+  .stars { font-size: 40px; }
+  #resTable { font-size: 13px; }
+  #resTable td { padding: 4px 3px; }
+  .total { font-size: 26px; }
+  .btns .btn { padding: 10px 14px; }
+  /* HUD: three small boxes; the level name is in the intro message */
+  #hud { left: 6px; right: 6px; top: 6px; gap: 5px; margin: 0; width: auto; justify-content: flex-start; }
+  #hudLevel { display: none; }
+  .hud-box { padding: 2px 8px; border-width: 2px; }
+  .hud-box .lbl { font-size: 9px; letter-spacing: 0.5px; }
+  .hud-box b, .timer-box b { font-size: 15px; }
+  #corner { top: 6px; right: 6px; gap: 5px; }
+  .icon { width: 34px; height: 34px; font-size: 14px; border-width: 2px; }
+  #toast { top: 54px; width: calc(100vw - 24px); text-align: center; font-size: 13px; }
+  #countdown { font-size: 110px; }
+}
+
+/* corner buttons always sit above menus */
+#corner { z-index: 5; }
+#resTable td:first-child { text-align: left; }
+@media (max-width: 600px) {
+  /* menus start below the corner buttons */
+  #overlay { padding-top: 50px; }
+  /* in-game toolbar: two rows that always fit the screen */
+  #toolbar { flex-wrap: wrap; overflow: visible; left: 6px; right: 6px; width: auto; max-width: none; margin: 0;
+    justify-content: space-between; gap: 6px 8px; padding: 6px 8px; bottom: 6px; border-radius: 14px; }
+  #toolbar .group { flex: 1 1 auto; }
+  #toolbar .group.strength { flex: 1 1 120px; }
+  #toolbar .strength .row { display: flex; }
+  #toolbar .strength input[type=range] { width: 100%; }
+  #toolbar .actions { flex: 1 1 100%; justify-content: space-between; }
+  #btnDetonate { flex: 1; font-size: 18px; padding: 10px; }
+  #btnClear { padding: 8px 12px; }
+  #replayBar { left: 6px; right: 6px; width: auto; margin: 0; gap: 6px; padding: 6px; }
+  #replayBar .rec { display: none; }
+  #rpScrub { flex: 1 1 100%; width: auto; order: 9; }
+}
+/* phones: HUD shows icons instead of word labels */
+@media (max-width: 600px) {
+  .hud-box .lbl { display: none; }
+  .hud-box { padding: 5px 8px; display: flex; align-items: center; }
+  #timer::before { content: '⏱ '; font-size: 13px; }
+  #budgetLeft::before { content: '💵 '; font-size: 13px; }
+  #chargeCount::before { content: '🧨 '; font-size: 13px; }
+}
+@media (max-width: 600px) {
+  #hud { right: 132px; gap: 4px; }
+  .hud-box { padding: 4px 6px; }
+  .hud-box b, .timer-box b { font-size: 14px; white-space: nowrap; }
+}
+@media (max-width: 400px) {
+  .hud-box { padding: 4px 5px; }
+  .hud-box b, .timer-box b { font-size: 12.5px; }
+  #timer::before, #budgetLeft::before, #chargeCount::before { font-size: 11px; }
+}
