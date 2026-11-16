@@ -108,6 +108,39 @@ each floor, so a frame can step back, split into towers or span a gap. The truss
 now takes a `shape` (`tower`, `needle` or `bridge`) and can anchor nodes to the world and
 carry solid blocks such as the saucer.
 
+### Industrial and special jobs (19–26)
+
+| Job | What it is | The trick |
+| --- | --- | --- |
+| **Factory Chimney** | A tall, thin brick chimney | Cut a wedge on one side and fell it into the yard between two warehouses |
+| **🏭 Cooling Tower** | A curved concrete shell on short legs | Cut both legs and it folds in on itself |
+| **🏟 Stadium Roof** | A long, shallow roof on five tall pylons | Drop it flat; cutting one end makes it slide toward the car park |
+| **🌉 Suspension Bridge** | Towers, a hanging main cable, hangers and a road deck | The cable and hangers really hang (they're pinned chains). Cut the cable, towers and deck ends |
+| **Hillside Block** | An office block at the top of a hill | Anything that rolls off the lot goes down the slope onto the road and cars below |
+| **Pool Hotel** | A resort hotel right beside its pool | Every chunk that lands in the pool costs 15 points |
+| **📡 Radio Mast** | A guyed mast pinned at its base, held up only by cables | Cut the anchors on one side and it falls the *other* way |
+| **👑 City Block** | Boss job: three connected buildings | Big budget and payout; firing it all at once shakes the neighbours' windows out |
+
+### Seismograph and shattered glass
+
+Every blast and every heavy piece of rubble hitting the ground shakes it. A live
+**seismograph** in the corner shows the vibration against the site's limit. The limit is
+60 mm/s on most jobs and tighter next to the church, the hotel, the clock tower and the
+city block. When vibration goes over the limit, **glass shatters**: panes in the
+neighbouring buildings (10 points each, double for the church) and car windows (20 points
+each). Firing charges a fraction of a second apart instead of all at once keeps the
+shaking down.
+
+### Delay sequencer and horn signals
+
+- **🎼 Sequence** opens a timeline of every charge in firing order. Drag a charge to
+  another column to change its delay, and press **▶ Preview** to watch the charges flash
+  in order. Firing-order numbers appear on the charges while the panel is open.
+- Detonation now follows real site practice. One long **horn** blast is the warning, two
+  short blasts mean stand clear, then the 3-2-1 countdown and the blast. An "all clear"
+  horn sounds when the dust settles. Some bystanders hear the horns and leave on their
+  own; the rest still need a tap.
+
 ### News ticker
 
 The results screen opens with a scrolling **BREAKING NEWS** ticker. Its headlines are
@@ -160,7 +193,7 @@ audio files.
 ```
 index.html        UI shell (HUD, toolbar, menus)
 css/style.css     styling
-js/levels.js      the eighteen demolition jobs
+js/levels.js      the twenty-six demolition jobs
 js/physics.js     building materials, explosives, collapse, cars, bystanders, replay
                   recording and scoring (also runs in Node)
 js/render.js      canvas renderer, particles, dust and camera shake

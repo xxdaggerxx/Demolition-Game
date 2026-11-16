@@ -50,6 +50,7 @@
       <button id="btnXray" class="btn small hidden" title="Load X-ray (X)">🩻<span class="tx"> X-ray</span></button>
       <button id="btnNetting" class="btn small hidden" title="Hang debris netting on the neighbours">🕸 Netting</button>
       <button id="btnMegaphone" class="btn small hidden" title="Clear all bystanders">📢<span class="tx"> Clear area</span></button>
+      <button id="btnSeq" class="btn small" title="Firing order">🎼<span class="tx"> Sequence</span></button>
       <button id="btnClear" class="btn">Clear</button>
       <button id="btnDetonate" class="btn red big">💥 DETONATE</button>
     </div>
@@ -77,6 +78,14 @@
     <div><i class="sw cut"></i> cut by a charge</div>
     <div><i class="sw over"></i> overloaded (flashing)</div>
   </div>
+
+  <div id="seqPanel" class="hidden">
+    <div class="seq-head"><b>🎼 Firing order</b><span class="seq-hint">drag a charge to change its delay</span>
+      <button id="seqPlay" class="btn small">▶ Preview</button><button id="seqClose" class="btn small">✕</button></div>
+    <div id="seqTrack"></div>
+  </div>
+
+  <div id="seismo" class="hidden"><canvas id="seisCanvas" width="340" height="96"></canvas><span id="seisLabel"></span></div>
 
   <div id="countdown" class="hidden"></div>
   <div id="toast" class="hidden"></div>

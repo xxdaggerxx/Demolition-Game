@@ -265,6 +265,29 @@
       this.osc('sawtooth', 160, t, 0.18, 0.15, this.sfxGain);
     }
 
+    // Site warning horn: kind = 'long' | 'short' | 'clear'
+    horn(kind) {
+      if (!this.ready()) return;
+      const t = this.ctx.currentTime;
+      const blasts = kind === 'short' ? [[0, 0.35], [0.5, 0.35]] : [[0, kind === 'clear' ? 1.6 : 1.2]];
+      for (const [at, dur] of blasts) {
+        const f = this.ctx.createBiquadFilter();
+        f.type = 'lowpass'; f.frequency.value = 1400; f.Q.value = 0.8;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0, t + at);
+        g.gain.linearRampToValueAtTime(0.22, t + at + 0.05);
+        g.gain.setValueAtTime(0.22, t + at + dur - 0.08);
+        g.gain.linearRampToValueAtTime(0, t + at + dur);
+        f.connect(g).connect(this.sfxGain);
+        const base = kind === 'clear' ? 262 : 233;
+        for (const mul of [1, 1.335, 2]) {
+          const o = this.ctx.createOscillator();
+          o.type = 'sawtooth'; o.frequency.value = base * mul;
+          o.connect(f); o.start(t + at); o.stop(t + at + dur + 0.05);
+        }
+      }
+    }
+
     beep(final) {
       if (!this.ready()) return;
       const t = this.ctx.currentTime;

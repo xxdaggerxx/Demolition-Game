@@ -229,6 +229,7 @@
   }
 
   function startLevel(i, setup) {
+    closeSeq();
     const L = LEVELS[i];
     state.levelIndex = i;
     state.sim = P.createSim(L, (Math.random() * 1e9) | 0);
@@ -275,19 +276,32 @@
     if (state.phase !== 'plan') return;
     if (!state.sim.charges.length) { audio.error(); toast('Plant at least one charge first!'); return; }
     state.phase = 'countdown';
-    state.countdown = 3;
+    state.countdown = COUNTDOWN;
+    state.hornStep = 0;
+    closeSeq();
     state.detonatedWithLeft = state.planLeft;
     state.lastSetup = snapshotSetup(state.sim);
     state.hover = null;
     setControlsEnabled(false);
     audio.setMode('tense');
-    audio.beep(false);
-    audio.fuse(3);
     const cd = $('countdown');
-    cd.textContent = '3';
     cd.classList.remove('hidden');
+    horn(0);
     const n = P.peopleInZone(state.sim);
     if (n) toast(`⚠ ${n} bystander${n > 1 ? 's' : ''} still in the danger zone — tap them!`, 2500);
+  }
+
+  // Real sites sound a long horn (warning), two short ones (stand clear), then fire.
+  const COUNTDOWN = 5.6, HORN2_AT = 1.5;
+  function horn(step) {
+    const cd = $('countdown');
+    cd.classList.add('horn');
+    if (step === 0) { cd.textContent = '📯 WARNING'; audio.horn('long'); state.hornStep = 1; }
+    else { cd.textContent = '📯📯 STAND CLEAR'; audio.horn('short'); state.hornStep = 2; }
+    // some bystanders hear the horn and leave on their own; others need a tap
+    for (const p of state.sim.people) {
+      if ((p.state === 'watch' || p.state === 'walk') && Math.random() < 0.45) P.shoo(state.sim, p);
+    }
   }
 
   function beginBlast() {
@@ -310,7 +324,8 @@
     const timeBonus = ev.success ? Math.round((state.detonatedWithLeft / state.planTime) * 100) : 0;
     const total = ev.success ? ev.score + timeBonus : 0;
     audio.setMode('calm');
-    audio.jingle(ev.success);
+    audio.horn('clear');
+    setTimeout(() => audio.jingle(ev.success), 1700);
 
     $('resTitle').textContent = ev.success
       ? (ev.directional ? (ev.stars === 3 ? 'Bullseye! Right on target!' : 'Toppled!') : ev.stars === 3 ? 'Perfect implosion!' : ev.penalty === 0 ? 'Clean job!' : 'Demolished!')
@@ -335,6 +350,9 @@
     if (ev.neighborPen) rows.push(['🏢 Neighbours hit', '×' + ev.hits, -ev.neighborPen]);
     if (ev.carPen) rows.push(['🚗 Cars hit', '×' + ev.carHits, -ev.carPen]);
     if (ev.bystanderPen) rows.push(['🙋 Bystanders', '×' + ev.bystanders, -ev.bystanderPen]);
+    if (ev.poolPen) rows.push(['🏊 In the pool', '×' + ev.poolHits, -ev.poolPen]);
+    rows.push([ev.vibPen ? '🪟 Glass shattered' : '📈 Vibration',
+      `${Math.round(ev.vibration)}/${ev.vibLimit} mm/s${ev.vibPen ? ` · 🪟×${ev.panes + ev.carGlass}` : ''}`, -ev.vibPen]);
     rows.push(['⏱️ Time left', Math.round(state.detonatedWithLeft) + 's', timeBonus]);
     $('resTable').innerHTML = rows.map(([a, b, c]) =>
       `<tr><td>${a}</td><td>${b}</td><td class="${c < 0 ? 'neg' : ''}">${c > 0 ? '+' : ''}${c}</td></tr>`).join('');
@@ -410,6 +428,15 @@
     }
     if (L.shape === 'needle' && ev.success) out.push(pick(['Flying saucer finally lands', 'Saucer deck touches down — no aliens found inside']));
     if (L.profile && ev.success && L.id === 15) out.push('Twin towers go down together, skybridge and all');
+    if (ev.vibPen) out.push(pick([`Windows shatter blocks away as ground shakes`, `Seismologists detect “mini earthquake” downtown`, `${ev.panes + ev.carGlass} windows broken by the blast — glaziers rejoice`]));
+    else if (ev.success && ev.vibration < ev.vibLimit * 0.5) out.push('Neighbours “barely felt a thing,” says vibration monitor');
+    if (ev.poolPen) out.push(pick(['Hotel pool now “mostly concrete”', 'Lifeguard on duty, rubble not invited', 'Pool closed until further notice']));
+    if (L.chimney && ev.success) out.push('Old factory chimney falls exactly where planned');
+    if (L.shape === 'mast' && ev.success) out.push('Radio station goes off the air — permanently');
+    if (L.shape === 'cooling' && ev.success) out.push('Cooling tower folds in on itself like a paper cup');
+    if (L.stadium && ev.success) out.push('Stadium roof comes down — no extra time played');
+    if (L.terrain && ev.carHits) out.push('Rubble rolls downhill, motorists not amused');
+    if (L.id === 26 && ev.success) out.push(pick(['Whole city block cleared in one go', 'Developers cheer as city block vanishes']));
     if (L.lean && ev.success) out.push('After centuries of leaning (well, a few years), the tower finally lies down');
     if (L.clockFloor != null && ev.success) out.push('Clock stops for good — witnesses confirm the exact time');
     if (ev.success && ev.underBudget >= 0.4) out.push(`Demolition firm finishes ${money(ev.budget - ev.spent)} under budget`);
@@ -433,6 +460,7 @@
   }
 
   function goLevels() {
+    closeSeq();
     audio.setMode('title');
     state.phase = 'title';
     state.replay = null;
@@ -781,6 +809,129 @@
   window.addEventListener('resize', () => renderer.resize());
   document.addEventListener('pointerdown', () => audio.unlock(), { once: true });
 
+  // ---------------- Delay sequencer ----------------
+  // Every charge on one timeline, in firing order. Drag a chip to change its delay.
+  function delayList() { return owns('detonator') ? FINE_DELAYS : BASE_DELAYS; }
+  let seqSig = '';
+  function openSeq() {
+    if (state.phase !== 'plan') return;
+    state.seqOpen = true;
+    $('seqPanel').classList.remove('hidden');
+    $('btnSeq').classList.add('on');
+    seqSig = '';
+    syncSeq();
+  }
+  function closeSeq() {
+    state.seqOpen = false;
+    state.preview = null;
+    $('seqPanel').classList.add('hidden');
+    $('btnSeq').classList.remove('on');
+  }
+  function syncSeq() {
+    const sim = state.sim;
+    const sig = sim.charges.map((c) => c.id + ':' + c.delay + ':' + c.type).join(',') + '|' + delayList().length;
+    if (sig === seqSig) return;
+    seqSig = sig;
+    const track = $('seqTrack');
+    track.innerHTML = '';
+    const list = delayList();
+    const colX = (i) => 6 + (i / (list.length - 1)) * 88; // percent
+    list.forEach((d, i) => {
+      const col = document.createElement('div');
+      col.className = 'seq-col'; col.style.left = colX(i) + '%';
+      col.innerHTML = `<span>${d}s</span>`;
+      track.appendChild(col);
+    });
+    const stack = {};
+    sim.charges.forEach((ch, n) => {
+      const i = Math.max(0, list.indexOf(ch.delay));
+      const row = (stack[i] = (stack[i] || 0) + 1) - 1;
+      const chip = document.createElement('div');
+      chip.className = 'seq-chip ' + ch.type;
+      chip.textContent = n + 1;
+      // chips in the same column fill a small grid: 3 rows, then the next column over
+      chip.style.left = `calc(${colX(i)}% + ${Math.floor(row / 3) * 32}px)`;
+      chip.style.top = 4 + (row % 3) * 24 + 'px';
+      chip.title = `Charge ${n + 1} · strength ${ch.strength}`;
+      chip.dataset.id = ch.id;
+      track.appendChild(chip);
+      chip.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        chip.setPointerCapture(e.pointerId);
+        chip.classList.add('drag');
+        const r = track.getBoundingClientRect();
+        const move = (ev) => {
+          const pct = ((ev.clientX - r.left) / r.width) * 100;
+          chip.style.left = Math.max(2, Math.min(98, pct)) + '%';
+        };
+        const up = (ev) => {
+          chip.removeEventListener('pointermove', move);
+          chip.removeEventListener('pointerup', up);
+          const pct = ((ev.clientX - r.left) / r.width) * 100;
+          const idx = Math.max(0, Math.min(list.length - 1, Math.round(((pct - 6) / 88) * (list.length - 1))));
+          if (ch.delay !== list[idx]) { ch.delay = list[idx]; audio.click(); }
+          seqSig = '';
+          syncSeq();
+        };
+        chip.addEventListener('pointermove', move);
+        chip.addEventListener('pointerup', up);
+      });
+    });
+  }
+  $('btnSeq').onclick = () => { audio.click(); if (state.seqOpen) closeSeq(); else openSeq(); };
+  $('seqClose').onclick = () => { audio.click(); closeSeq(); };
+  $('seqPlay').onclick = () => {
+    audio.click();
+    state.preview = performance.now();
+    const sim = state.sim, max = Math.max(0, ...sim.charges.map((c) => c.delay));
+    for (const ch of sim.charges) setTimeout(() => {
+      if (!state.preview) return;
+      audio.beep(false);
+      const chip = document.querySelector(`.seq-chip[data-id="${ch.id}"]`);
+      if (chip) { chip.classList.add('fire'); setTimeout(() => chip.classList.remove('fire'), 400); }
+    }, ch.delay * 1000);
+    setTimeout(() => { state.preview = null; }, max * 1000 + 600);
+  };
+
+  // ---------------- Seismograph ----------------
+  function drawSeismo(sim) {
+    const box = $('seismo');
+    const show = state.phase !== 'title' && !!sim && !$('hud').classList.contains('hidden');
+    box.classList.toggle('hidden', !show);
+    if (!show) return;
+    const limit = sim.level.vibLimit || P.VIB_LIMIT;
+    let trace = sim.seis, now = sim.shake, peak = sim.peakShake;
+    if (state.phase === 'replay' && state.rec) {
+      const fr = state.rec.frames, idx = frameIndexAt(state.rec, state.replay.t);
+      trace = []; peak = 0;
+      for (let i = 0; i <= idx; i += 1) { trace.push(fr[i].shake || 0); peak = Math.max(peak, fr[i].shake || 0); }
+      now = fr[idx].shake || 0;
+    } else if (state.phase === 'plan' || state.phase === 'countdown') { trace = []; now = 0; peak = 0; }
+    const cv = $('seisCanvas'), g = cv.getContext('2d');
+    const W = cv.width, H = cv.height, top = Math.max(limit * 1.6, peak * 1.1);
+    g.clearRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(255,255,255,0.08)'; g.lineWidth = 1;
+    for (let y = 0; y < H; y += 16) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+    const ly = H - (limit / top) * H;
+    g.setLineDash([6, 4]); g.strokeStyle = '#ff6b6b'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(0, ly); g.lineTo(W, ly); g.stroke(); g.setLineDash([]);
+    const n = Math.min(trace.length, W / 1.5);
+    g.strokeStyle = '#7CFC9A'; g.lineWidth = 2; g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const v = trace[trace.length - n + i];
+      const x = W - (n - i) * 1.5, y = H / 2 + 0; // centre line
+      const amp = (v / top) * H * 0.95;
+      const yy = H - amp * (0.75 + 0.25 * Math.sin(i * 2.3));
+      if (i === 0) g.moveTo(x, yy); else g.lineTo(x, yy);
+      void y;
+    }
+    g.stroke();
+    const lbl = $('seisLabel');
+    lbl.textContent = state.phase === 'plan' || state.phase === 'countdown'
+      ? `📈 Vibration limit ${limit} mm/s` : `📈 ${Math.round(now)} mm/s · peak ${Math.round(peak)} / ${limit}`;
+    lbl.classList.toggle('over', peak > limit);
+  }
+
   // ---------------- Effects ----------------
   function playFx(f) {
     if (f.type === 'explosion') {
@@ -810,6 +961,17 @@
     } else if (f.type === 'bystander') {
       renderer.addText(f.x, f.y, `-${f.pen} 😱`, 'rgba(255,90,200,A)');
       audio.scream();
+    } else if (f.type === 'pane') {
+      renderer.addPane(f.x, f.y, f.w, f.h);
+      renderer.addText(f.x, f.y - 6, `-${f.pen} 🪟`, 'rgba(120,200,255,A)');
+      audio.glass();
+    } else if (f.type === 'carglass') {
+      renderer.addPane(f.x, f.y, 30, 10);
+      renderer.addText(f.x, f.y - 10, `-${f.pen} 🚗`, 'rgba(120,200,255,A)');
+      audio.glass(); audio.carAlarm();
+    } else if (f.type === 'pool') {
+      renderer.addSplash(f.x, f.y, true);
+      if (f.pen) renderer.addText(f.x, f.y - 14, `-${f.pen} 🏊`, 'rgba(60,200,255,A)');
     }
   }
 
@@ -839,7 +1001,13 @@
       const before = Math.ceil(state.countdown);
       state.countdown -= dt;
       const after = Math.ceil(state.countdown);
-      if (after !== before && after > 0) { $('countdown').textContent = after; audio.beep(false); }
+      const elapsed = COUNTDOWN - state.countdown;
+      if (state.hornStep === 1 && elapsed >= HORN2_AT) horn(1);
+      if (state.hornStep === 2 && elapsed >= HORN2_AT + 1.1) { state.hornStep = 3; audio.fuse(3); }
+      if (state.hornStep === 3 && after !== before && after > 0 && after <= 3) {
+        const cd = $('countdown');
+        cd.classList.remove('horn'); cd.textContent = after; audio.beep(false);
+      }
       if (state.countdown <= 0) { audio.beep(true); beginBlast(); }
     } else if (state.phase === 'blast') {
       const maxDelay = Math.max(0, ...sim.charges.map((c) => c.delay));
@@ -870,19 +1038,27 @@
     }
 
     const bar = state.phase === 'replay' ? $('replayBar') : $('toolbar');
-    const bottomInset = bar.classList.contains('hidden') ? 10 : bar.offsetHeight + 16;
+    let bottomInset = bar.classList.contains('hidden') ? 10 : bar.offsetHeight + 16;
+    const seqEl = $('seqPanel');
+    if (!seqEl.classList.contains('hidden')) {
+      seqEl.style.bottom = bottomInset + 'px';
+      bottomInset += seqEl.offsetHeight + 8;
+    }
     renderer.setInsets(window.innerHeight < 500 ? 46 : 70, Math.max(bottomInset, window.innerHeight < 500 ? 50 : 90));
     // particles run at replay speed so slow-mo looks right
     renderer.update(state.phase === 'replay' && state.replay.playing ? dt * state.replay.speed : state.phase === 'replay' ? 0 : dt);
     const scene = state.phase === 'replay'
       ? P.frameScene(sim, state.rec, frameIndexAt(state.rec, state.replay.t))
       : P.liveScene(sim);
+    drawSeismo(sim);
+    if (state.seqOpen) syncSeq();
     const xrayOn = state.xray && state.phase === 'plan' && owns('xray') && !sim.truss && !sim.noXray;
     $('xrayLegend').classList.toggle('hidden', !xrayOn);
     renderer.draw({
       xray: xrayOn ? P.loadMap(sim) : null,
       scene, phase: state.phase, hover: state.phase === 'plan' ? state.hover : null,
       strength: state.strength, delay: state.delay, chargeType: state.chargeType, showLot: state.phase === 'plan',
+      seqOpen: state.seqOpen && state.phase === 'plan', preview: state.preview ? (performance.now() - state.preview) / 1000 : null,
     });
     $('btnView').classList.toggle('hidden', !renderer.isZoomed());
     updateHud();
